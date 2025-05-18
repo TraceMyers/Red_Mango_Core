@@ -7,7 +7,6 @@
 #load "number_interpretation.jai";
 #load "logging.jai";
 #load "array_utils.jai";
-#load "compile_time.jai";
 #load "serialize.jai";
 #load "string.jai";
 #load "encode_text.jai";
