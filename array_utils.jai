@@ -1,0 +1,90 @@
+
+Bound_Array :: struct($T: Type) {
+    array: []T;
+    max: s64;
+}
+
+bound_array :: inline (from_data: []$T) -> Bound_Array(T) {
+    buf: Bound_Array(T) = ---;
+    buf.array.data = from_data.data;
+    buf.array.count = 0;
+    buf.max = from_data.count;
+    return buf;
+}
+
+bound_array_add :: inline (buf: *Bound_Array($T), item: T) #expand {
+    assert(buf.array.count + 1 <= buf.max);
+    buf.array.count += 1;
+    buf.array[buf.array.count-1] = item;
+}
+
+bound_array_append :: inline (buf: *Bound_Array($T), items: []T)  {
+    assert(buf.array.count + items.count <= buf.max);
+    copy_memory(buf.array.data+buf.array.count, items.data, items.count);
+    buf.array.count += items.count;
+}
+
+bound_array_reset :: inline (buf: *Bound_Array($T), keep_data_reference := true) {
+    if !keep_data_reference {
+        buf.array.data = null;
+        buf.max = 0;
+    }
+    buf.array.count = 0;
+}
+
+copy_memory :: inline (dest: *$T, src: *T, count: s64) {
+    memcpy(dest, src, count * size_of(T));
+}
+
+temp_dynamic_array :: inline ($T: Type, reserve_count := 0) -> [..]T {
+    array: [..]T;
+    array.allocator = temp;
+    array_reserve(*array, reserve_count);
+    return array;
+}
+
+alloc_array :: inline ($T: Type, count: s64, allocator:=context.allocator) -> []T {
+    buffer: []T = ---;
+    buffer.data = xx alloc(count * size_of(T),, allocator);
+    buffer.count = count;
+    return buffer;
+}
+
+array_element_index :: inline (array: []T, item: *$T) -> s64 {
+    index := item - array.data;
+    assert(index >= 0 && index < array.count);
+    return index;
+}
+
+arrays_equal :: inline (a: []$T, b: []T) -> bool {
+    if a.count != b.count return false;
+    for a { 
+        if it != b[it_index] then return false; 
+    }
+    return true;
+}
+
+array_append :: inline (a: *[..]$T, b: []T) {
+    if b.count == 0 then return;
+    prev_count := a.count;
+    array_resize(a, a.count + b.count);
+    copy_memory(a.data + prev_count, b.data, b.count);
+}
+
+concatenate :: (a: []$T, b: []T, allocator:=context.allocator) -> []T {
+    arr := alloc_array(T, a.count + b.count, allocator);
+    copy_memory(arr.data, a.data, a.count);
+    copy_memory(arr.data + a.count, b.data, b.count);
+    return arr;
+}
+
+duplicate :: (array: []$T, allocator:=context.allocator) -> []T {
+    duplicate := alloc_array(T, array.count, allocator);
+    copy_array(duplicate, array);
+    return duplicate;
+}
+
+copy_array :: inline (dest: []$T, src: []T) {
+    assert(dest.count >= src.count);
+    copy_memory(dest.data, src.data, dest.count);
+}
