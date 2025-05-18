@@ -1,4 +1,3 @@
-
 Bound_Array :: struct($T: Type) {
     array: []T;
     max: s64;
