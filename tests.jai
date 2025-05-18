@@ -1,4 +1,5 @@
 bit_array_test :: () -> bool, string {
+    auto_release_temp();
     single_bits: Bit_Array(1);
     set_capacity(*single_bits, 97);
 
@@ -449,6 +450,7 @@ array_utils_test :: () -> bool, string {
 }
 
 pool_test :: () -> bool, string {
+    auto_release_temp();
     SomeStruct :: struct {
         a : s32 = -1;
         b := 1.0;
@@ -573,6 +575,17 @@ pool_test :: () -> bool, string {
 
     test_condition(p.top == -1);
     test_condition(p.items.count >= 12);
+
+    return_test_success();
+}
+
+// mostly for sanity testing before a commit. tests in here likely aren't precious.
+misc_test :: () -> bool, string {
+    auto_release_temp();
+    k: [9]u64;
+    k[2] = 20;
+    zero_array(k);
+    test_condition(k[2] == 0);
 
     return_test_success();
 }

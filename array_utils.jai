@@ -87,3 +87,14 @@ copy_array :: inline (dest: []$T, src: []T) {
     assert(dest.count >= src.count);
     copy_memory(dest.data, src.data, dest.count);
 }
+
+zero_array :: inline (array: []$T) {
+    if array.count > 0 {
+        zero_memory(array.data, array.count * size_of(T));
+    }
+}
+
+zero_memory :: inline (data: *void, byte_count: s64) {
+    memset(data, 0, byte_count);
+}
+

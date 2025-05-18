@@ -35,7 +35,8 @@ Compiler :: #import "Compiler";
         text_encoding_test,
         math_test,
         array_utils_test,
-        pool_test
+        pool_test,
+        misc_test
     ];
     #run run_tests("red mango module", tests);
 }
