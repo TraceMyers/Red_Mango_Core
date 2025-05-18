@@ -1,3 +1,4 @@
+
 Bit_Array :: struct($IN_GROUP_BIT_COUNT: int) {
     #run,stallable assert(is_power_of_two(IN_GROUP_BIT_COUNT) && IN_GROUP_BIT_COUNT <= 64);
     items: [..]u64;
