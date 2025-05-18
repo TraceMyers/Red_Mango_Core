@@ -92,10 +92,10 @@ operator == :: inline (a: Int_Vector3, b: Int_Vector3) -> bool {
     return (a.x == b.x) && (a.y == b.y) && (a.z == b.z);
 }
 
-to_vector2 :: inline (v: Int_Vector3) -> Vector3 {
+to_vector3 :: inline (v: Int_Vector3) -> Vector3 {
     return .{xx v.x, xx v.y, xx v.z};
 }
 
-to_int_vector2 :: inline (v: Vector3) -> Int_Vector3 {
+to_int_vector3 :: inline (v: Vector3) -> Int_Vector3 {
     return .{xx v.x, xx v.y, xx v.z};
 }
