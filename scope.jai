@@ -28,3 +28,4 @@ scope_system_setup :: ($T: Type, do_run: *bool) #expand {
     if !do_run.* then return;
     `defer T.scope_deinitialize();
 }
+

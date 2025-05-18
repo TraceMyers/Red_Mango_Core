@@ -192,3 +192,25 @@ process_per_line :: (str: string, per_line_proc: (line: *string, line_index: s64
     }
     return line_count;
 }
+
+c_strings_equal :: (a: *u8, b: *u8, max_read_count: s64) -> bool {
+    if max_read_count <= 0 {
+        return false;
+    }
+    for i : 0..max_read_count-1 {
+        if a[i] == 0 {
+            if b[i] == 0 {
+                return true;
+            } else {
+                return false;
+            }
+        } else if b[i] == 0 {
+            return false;
+        }
+        if a[i] != b[i] {
+            return false;
+        }
+    }
+    return true;
+}
+
