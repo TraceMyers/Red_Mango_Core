@@ -1,3 +1,4 @@
+
 code_string :: ($code: Code, allocator := temp) -> string {
     builder: String_Builder;
     builder.allocator = allocator;
