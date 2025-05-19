@@ -13,7 +13,7 @@
 #load "scope.jai";
 #load "pool.jai";
 
-RUN_TESTS :: false;
+RUN_TESTS :: true;
 SAFE_TEXT_ENCODING :: true;
 SERIALIZE_DEBUG :: false;
 

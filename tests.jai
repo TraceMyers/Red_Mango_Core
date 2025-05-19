@@ -582,10 +582,21 @@ pool_test :: () -> bool, string {
 // mostly for sanity testing before a commit. tests in here likely aren't precious.
 misc_test :: () -> bool, string {
     auto_release_temp();
-    k: [9]u64;
-    k[2] = 20;
-    zero_array(k);
-    test_condition(k[2] == 0);
+    {
+        k: [9]u64;
+        k[2] = 20;
+        zero_array(k);
+        test_condition(k[2] == 0);
+    }
+    {
+        b: Bound_Local_Array(s32, 8);
+        bound_local_array_init(*b);
+        bound_local_array_add(*b, 1);
+        bound_local_array_add(*b, 1);
+        bound_local_array_add(*b, 1);
+        bound_local_array_add(*b, 1);
+        test_condition(arrays_equal(b.array, s32.[1, 1, 1, 1]));
+    }
 
     return_test_success();
 }

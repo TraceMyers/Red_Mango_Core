@@ -11,7 +11,7 @@ bound_array :: inline (from_data: []$T) -> Bound_Array(T) {
     return buf;
 }
 
-bound_array_add :: inline (buf: *Bound_Array($T), item: T) #expand {
+bound_array_add :: inline (buf: *Bound_Array($T), item: T) {
     assert(buf.array.count + 1 <= buf.max);
     buf.array.count += 1;
     buf.array[buf.array.count-1] = item;
@@ -29,6 +29,30 @@ bound_array_reset :: inline (buf: *Bound_Array($T), keep_data_reference := true)
         buf.max = 0;
     }
     buf.array.count = 0;
+}
+
+Bound_Local_Array :: struct($T: Type, $IN_MAX_COUNT: u64) {
+    MAX_COUNT :: IN_MAX_COUNT;
+    array : []T;
+    array_data: [IN_MAX_COUNT]T;
+}
+
+bound_local_array_init :: inline (buf: *void) {
+    buffer := buf.(*Bound_Local_Array(s32, 1));
+    buffer.array.data = buffer.array_data.data;
+    buffer.array.count = 0;
+}
+
+bound_local_array_add :: inline (buf: *Bound_Local_Array($T, $MAX_COUNT), item: T) {
+    assert((buf.array.count + 1).(u64) <= MAX_COUNT);
+    buf.array.count += 1;
+    buf.array[buf.array.count-1] = item;
+}
+
+bound_local_array_append :: inline (buf: *Bound_Local_Array($T, $MAX_COUNT), items: []T)  {
+    assert((buf.array.count + items.count).(u64) <= MAX_COUNT);
+    copy_memory(buf.array.data+buf.array.count, items.data, items.count);
+    buf.array.count += items.count;
 }
 
 copy_memory :: inline (dest: *$T, src: *T, count: s64) {
