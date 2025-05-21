@@ -592,10 +592,15 @@ misc_test :: () -> bool, string {
         b: Bound_Local_Array(s32, 8);
         bound_local_array_init(*b);
         bound_local_array_add(*b, 1);
+        bound_local_array_add(*b, 2);
+        bound_local_array_add(*b, S32_MAX);
+        bound_local_array_add(*b, S32_MIN);
         bound_local_array_add(*b, 1);
-        bound_local_array_add(*b, 1);
-        bound_local_array_add(*b, 1);
-        test_condition(arrays_equal(b.array, s32.[1, 1, 1, 1]));
+        bound_local_array_add(*b, 2);
+        bound_local_array_add(*b, S32_MAX);
+        bound_local_array_add(*b, S32_MIN);
+        test_condition(arrays_equal(b.array, s32.[1, 2, S32_MAX, S32_MIN, 1, 2, S32_MAX, S32_MIN]));
+        test_condition(b.array.count == b.array_data.count);
     }
 
     return_test_success();
