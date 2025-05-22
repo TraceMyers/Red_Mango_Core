@@ -29,3 +29,8 @@ scope_system_setup :: ($T: Type, do_run: *bool) #expand {
     `defer T.scope_deinitialize();
 }
 
+scope_set_working_directory :: (dir: string) #expand {
+    cwd := get_working_directory();
+    set_working_directory(dir);
+    `defer set_working_directory(cwd);   
+}
