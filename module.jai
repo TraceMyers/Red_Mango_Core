@@ -23,7 +23,7 @@ NESTING_ALLOCATOR_DEBUG :: false;
 
 #scope_module // -------------------------------------------------------------------------------------------- { MODULE }
 
-#import "Basic"()();
+#import "Basic";
 #import "Math";
 #import "File";
 #import "File_Utilities";
