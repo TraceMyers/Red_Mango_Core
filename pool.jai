@@ -39,7 +39,7 @@ reset :: (using pool: *Pool($T), deinit_item_proc: (*T) = null, keep_memory := f
     top = -1;
 }
 
-request_item :: (using pool: *Pool($T), init_item_proc: (*T) = null, grow_behavior := Pool_Resize_Behavior.DEFAULT) -> s64 {
+request_item :: no_inline (using pool: *Pool($T), init_item_proc: (*T) = null, grow_behavior := Pool_Resize_Behavior.DEFAULT) -> s64 {
     index := find_first_unset_bit(*in_use);
     if index != -1 {
         set_bit(*in_use, index);

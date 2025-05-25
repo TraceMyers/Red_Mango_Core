@@ -1,1 +1,4 @@
 .build/
+module.exe
+module.pdb
+module.rdi

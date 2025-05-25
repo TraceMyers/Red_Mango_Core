@@ -1,5 +1,4 @@
 bit_array_test :: () -> bool, string {
-    auto_release_temp();
     single_bits: Bit_Array(1);
     set_capacity(*single_bits, 97);
 
@@ -141,8 +140,6 @@ bit_array_test :: () -> bool, string {
 }
 
 text_encoding_test :: () -> bool, string {
-    auto_release_temp();
-
     utf8_real_world_file := tprint("%/test_supplemental/utf8_in.txt", #filepath);
     utf8_real_world, read_utf8_real_world_success := read_entire_file(utf8_real_world_file);
     test_condition(read_utf8_real_world_success);
@@ -204,7 +201,7 @@ text_encoding_test :: () -> bool, string {
     bad_utf32_to_utf16:, encode_success = encode_temp_text(bad_utf32, .UTF32, .UTF16);
     test_condition(!encode_success);
 
-    unaligned_utf16 := "\x00\x01\x02";
+    unaligned_utf16 := copy_string("\x00\x01\x02");
     addr_is_even := (unaligned_utf16.data.(u64) & 1) == 0;
     if addr_is_even {
         unaligned_utf16.data += 1;
@@ -400,7 +397,6 @@ math_test :: () -> bool, string {
 }
 
 array_utils_test :: () -> bool, string {
-    auto_release_temp();
     {
         base_array := u32.[0, 1, 2, 3];
         bound := bound_array(base_array);
@@ -450,7 +446,6 @@ array_utils_test :: () -> bool, string {
 }
 
 pool_test :: () -> bool, string {
-    auto_release_temp();
     SomeStruct :: struct {
         a : s32 = -1;
         b := 1.0;
@@ -579,9 +574,100 @@ pool_test :: () -> bool, string {
     return_test_success();
 }
 
+nesting_allocator_test :: () -> bool, string {
+    a: Nesting_Allocator;
+    // initialize_nesting_allocator(*a, 16385);
+    // test_condition(a.chunk_lists.count == 1);
+    // test_condition(a.chunk_lists[0].count == 17);
+
+    return_test_success();
+}
+
+bump_allocator_test :: () -> bool, string {
+    b: Bump_Allocator;
+    bump_allocator_initialize(*b);
+    defer bump_allocator_reset(*b);
+
+    test_condition(b.heaps.count == 1 || b.heaps[1].bytes.count == 0);
+    test_condition(b.heaps[0].bytes.count == BUMP_ALLOCATOR_DEFAULT_HEAP_SIZE);
+    test_condition(b.heaps[0].end == 0);
+    {
+        scope_mark_and_recede_allocations(*b);
+        alloc1 := bump_allocator_allocate(*b, 1024);     
+        test_condition(b.heaps[0].end == 1024);
+        alloc2 := bump_allocator_allocate(*b, 1025);
+        test_condition(b.heaps[0].end == 1024 + 1025 + 7);
+        alloc3 := bump_allocator_allocate(*b, 1023);
+        test_condition(b.heaps[0].end == 1024 + 1025 + 7 + 1023 + 1);
+        {
+            scope_mark_and_recede_allocations(*b);
+            data_prev: *u8 = null;
+            prev_alloc_size: s32 = -1;
+            for 0..100 {
+                data: *u8 = bump_allocator_allocate(*b, it);
+                if prev_alloc_size >= 1 {
+                    diff := data.(u64) - data_prev.(u64);
+                    should_be_diff := ceil_to_multiple(prev_alloc_size, 8);
+                    test_condition(diff == xx should_be_diff);
+                } else if prev_alloc_size == 0 {
+                    // alloc(0) == no diff;
+                    diff := data.(u64) - data_prev.(u64);
+                    test_condition(diff == 0);
+                }
+                prev_alloc_size = xx it;
+                data_prev = data;
+            }
+        }
+        test_condition(b.heaps[0].end == 1024 + 1025 + 7 + 1023 + 1);
+    }
+    test_condition(b.heaps[0].end == 0);
+
+    {
+        scope_set_allocator(b);
+        {
+            scope_mark_and_recede_allocations(*b);
+            alloc1 := alloc(1024);     
+            test_condition(b.heaps[0].end == 1024);
+            alloc2 := alloc(1025);
+            test_condition(b.heaps[0].end == 1024 + 1025 + 7);
+            alloc3 := alloc(1023);
+            test_condition(b.heaps[0].end == 1024 + 1025 + 7 + 1023 + 1);
+            {
+                scope_mark_and_recede_allocations(*b);
+                for 0..100 {
+                    alloc(it);
+                }
+            }
+            test_condition(b.heaps[0].end == 1024 + 1025 + 7 + 1023 + 1);
+        }
+    }
+    test_condition(b.heaps[0].end == 0);
+
+    {
+        scope_set_allocator(b);
+        scope_mark_and_recede_allocations(*b);
+        alloc_sz := BUMP_ALLOCATOR_DEFAULT_HEAP_SIZE / 3 - 8;
+        for 0..5 {
+            data: *u8 = alloc(alloc_sz);
+            if it <= 2 {
+                test_condition(b.heaps[1].bytes.count == 0);
+                test_condition(b.heaps[1].end == 0);
+            } else if it <= 5 {
+                test_condition(b.heaps[0].end < BUMP_ALLOCATOR_DEFAULT_HEAP_SIZE);
+                test_condition(b.heaps[1].bytes.count == BUMP_ALLOCATOR_DEFAULT_HEAP_SIZE);
+                test_condition(b.heaps[2].bytes.count == 0);
+                test_condition(b.heaps[2].end == 0);
+            }
+        }
+    }
+    test_condition(b.heaps[0].end == 0);
+
+
+    return_test_success();
+}
+
 // mostly for sanity testing before a commit. tests in here likely aren't precious.
 misc_test :: () -> bool, string {
-    auto_release_temp();
     {
         k: [9]u64;
         k[2] = 20;
@@ -605,3 +691,4 @@ misc_test :: () -> bool, string {
 
     return_test_success();
 }
+

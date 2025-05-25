@@ -122,3 +122,34 @@ zero_memory :: inline (data: *void, byte_count: s64) {
     memset(data, 0, byte_count);
 }
 
+resize_copy :: (array: *[]$T, new_count: s64) {
+    new_array := alloc_array(T, new_count);
+    copy_count := min(new_count, array.count);
+    if copy_count > 0 {
+        memcpy(new_array.data, array.data, copy_count * size_of(T));
+    }
+    array_reset(array);
+    array.* = new_array;
+}
+
+copy_range_inside_array :: (array: []$T, dst: s64, src: s64, count: s64) {
+    assert(count > 0 && dst != src);
+    diff := dst - src;
+    abs_diff := abs(diff);
+    if abs_diff < count {
+        if diff < 0 then for 0..count-1 {
+            array[dst+it] = array[src+it];
+        } else for #v2 < 0..count-1 {
+            array[dst+it] = array[src+it];
+        }
+    } else {
+        memcpy(array.data + dst, array.data + src, count * size_of(T));
+    }
+}
+
+// dst: |-----|
+// src:    |-----|
+
+// dst:    |-----|
+// src: |-----|
+

@@ -34,3 +34,9 @@ scope_set_working_directory :: (dir: string) #expand {
     set_working_directory(dir);
     `defer set_working_directory(cwd);   
 }
+
+scope_mark_and_recede_allocations :: (using bump: *Bump_Allocator) #expand {
+    mark := bump_allocator_get_high_water_mark(bump);
+    `defer bump_allocator_reset_to_high_water_mark(bump, mark);
+}
+

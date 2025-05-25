@@ -1,5 +1,5 @@
 
-code_string :: ($code: Code, allocator := temp) -> string {
+code_string :: ($code: Code, allocator := temp) -> string #expand {
     builder: String_Builder;
     builder.allocator = allocator;
     assert(Program_Print.print_expression(*builder, Compiler.compiler_get_nodes(code)));

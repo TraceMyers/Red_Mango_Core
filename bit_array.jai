@@ -10,7 +10,7 @@ Bit_Array :: struct($IN_GROUP_BIT_COUNT: int) {
 }
 
 bit_array_group_base_mask :: inline (bit_group_count: int) -> u64  {
-    return ifx bit_group_count == 64 then (~0).(u64) else ((1 << bit_group_count) - 1).(u64);
+    return ifx bit_group_count == 64 then (~0).(u64) else ((1 << bit_group_count) - 1).(u64,force);
 }
 
 single_bit_mask :: inline (using array: *Bit_Array($COUNT), group: s64, in_group_index: s64) -> s64, u64 {
@@ -19,7 +19,7 @@ single_bit_mask :: inline (using array: *Bit_Array($COUNT), group: s64, in_group
     items_index := group >> GROUP_INDEXING_SHIFT;
     truncated_group_index := items_index << GROUP_INDEXING_SHIFT;
     group_index_in_u64 := group - truncated_group_index;
-    bit_mask := (1 << (group_index_in_u64 * GROUP_BIT_COUNT + in_group_index)).(u64);
+    bit_mask := (1 << (group_index_in_u64 * GROUP_BIT_COUNT + in_group_index)).(u64,no_check);
     return items_index, bit_mask;
 }
 
@@ -326,6 +326,7 @@ find_first_set_bit :: #bake_arguments find_first_group_with_set_bits(ENFORCE_BIT
 group_to_bit_index :: inline (using array: *Bit_Array($COUNT), group: s64, in_group_index := 0) -> s64 {
     return group * GROUP_BIT_COUNT + in_group_index;
 }
+
 
 #scope_file // ------------------------------------------------------------------------------------------------ { FILE }
 
