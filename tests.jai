@@ -574,14 +574,14 @@ pool_test :: () -> bool, string {
     return_test_success();
 }
 
-nesting_allocator_test :: () -> bool, string {
-    a: Nesting_Allocator;
+// nesting_allocator_test :: () -> bool, string {
+    // a: Nesting_Allocator;
     // initialize_nesting_allocator(*a, 16385);
     // test_condition(a.chunk_lists.count == 1);
     // test_condition(a.chunk_lists[0].count == 17);
-
-    return_test_success();
-}
+//
+    // return_test_success();
+// }
 
 bump_allocator_test :: () -> bool, string {
     b: Bump_Allocator;
@@ -688,6 +688,7 @@ misc_test :: () -> bool, string {
         test_condition(arrays_equal(b.array, s32.[1, 2, S32_MAX, S32_MIN, 1, 2, S32_MAX, S32_MIN]));
         test_condition(b.array.count == b.array_data.count);
     }
+
 
     return_test_success();
 }

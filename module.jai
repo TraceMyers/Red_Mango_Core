@@ -12,7 +12,7 @@
 #load "encode_text.jai";
 #load "scope.jai";
 #load "pool.jai";
-#load "nesting_allocator.jai";
+// #load "nesting_allocator.jai";
 #load "bit_ops.jai";
 #load "bump_allocator.jai";
 
@@ -47,7 +47,7 @@ Compiler :: #import "Compiler";
             array_utils_test,
             pool_test,
             misc_test,
-            nesting_allocator_test,
+            // nesting_allocator_test,
             bump_allocator_test,
         ];
         run_tests("red mango module", tests);
