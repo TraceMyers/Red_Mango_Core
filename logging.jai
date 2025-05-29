@@ -9,7 +9,7 @@ rm_warning :: (fmt: string, args: ..Any, log_location := true, caller_loc := #ca
     report_impl(fmt, ..args, log_context=log_context, log_location, caller_loc, "WARNING");
 }
 
-rm_log :: (fmt: string, args: ..Any, log_location := false, caller_loc := #caller_location, header := "REPORT") #expand {
+rm_log :: (fmt: string, args: ..Any, log_location := false, caller_loc := #caller_location, header := "LOG") #expand {
     log_context := #procedure_name();
     report_impl(fmt, ..args, log_context=log_context, log_location, caller_loc, header);
 }
