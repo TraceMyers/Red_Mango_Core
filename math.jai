@@ -43,53 +43,6 @@ round :: (a: float64, $Int_Type := s32) -> Int_Type
     }
 }
 
-Ceil_Function :: enum {
-    AWAY_FROM_ZERO; // rounds negative numbers toward negative infinity, and vice-versa
-    TOWARD_POSITIVE_INFINITY; // all numbers get rounded up, away from negative infinity
-}
-
-ceil :: inline (a: float64, $To_Type := s32, $FUNC := Ceil_Function.AWAY_FROM_ZERO) -> To_Type 
-#modify {
-    return is_int_type(To_Type);
-} {
-    t_val := a.(To_Type);
-    unit_part := a - t_val.(float64);
-    #if FUNC == .AWAY_FROM_ZERO {
-        if unit_part > 0 {
-            return t_val + 1;
-        } else {
-            return t_val - 1;
-        }
-    } else { // toward positive infinity
-        if unit_part > 0 {
-            return t_val + 1;
-        } else {
-            return t_val;
-        }
-    }
-}
-
-Floor_Function :: enum {
-    TOWARD_ZERO;
-    TOWARD_NEGATIVE_INFINITY;
-}
-
-floor :: inline (a: float64, $To_Type := s32, $FUNC := Floor_Function.TOWARD_ZERO) -> To_Type 
-#modify {
-    return is_int_type(To_Type);
-} {
-    casted := a.(To_Type);
-    #if FUNC == .TOWARD_ZERO {
-        return casted;
-    } else { // toward negative infinity
-        if a < 0.0 {
-            return casted - 1;
-        } else {
-            return casted;
-        }
-    }
-}
-
 // cast between int and normalized or non-normalized floats with optional rounding on float->int
 alter_cast :: inline (number: $In_Type, $Out_Type: Type, $NORMALIZED_FLOAT := false, $ROUND_TO_INT := true) -> Out_Type
 #modify {

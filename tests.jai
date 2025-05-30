@@ -325,55 +325,6 @@ math_test :: () -> bool, string {
         test_condition(out_int2 == S32_MIN);
     }
     {
-        f := 1.99999;
-        floored := floor(f, s32, .TOWARD_ZERO);
-        ceiled := ceil(f, s32, .TOWARD_POSITIVE_INFINITY);
-        rounded := round(f);
-        test_condition(floored == 1);
-        test_condition(ceiled == 2);
-        test_condition(rounded == 2);
-        floored = floor(f, s32, .TOWARD_NEGATIVE_INFINITY);
-        ceiled = ceil(f, s32, .AWAY_FROM_ZERO);
-        test_condition(floored == 1);
-        test_condition(ceiled == 2);
-
-        f = 1.00001;
-        floored = floor(f, s32, .TOWARD_ZERO);
-        ceiled = ceil(f, s32, .TOWARD_POSITIVE_INFINITY);
-        rounded = round(f);
-        test_condition(floored == 1);
-        test_condition(ceiled == 2);
-        test_condition(rounded == 1);
-        floored = floor(f, s32, .TOWARD_NEGATIVE_INFINITY);
-        ceiled = ceil(f, s32, .AWAY_FROM_ZERO);
-        test_condition(floored == 1);
-        test_condition(ceiled == 2);
-
-        f = -1.99999;
-        floored = floor(f, s32, .TOWARD_ZERO);
-        ceiled = ceil(f, s32, .TOWARD_POSITIVE_INFINITY);
-        rounded = round(f);
-        test_condition(floored == -1);
-        test_condition(ceiled == -1);
-        test_condition(rounded == -2);
-        floored = floor(f, s32, .TOWARD_NEGATIVE_INFINITY);
-        ceiled = ceil(f, s32, .AWAY_FROM_ZERO);
-        test_condition(floored == -2);
-        test_condition(ceiled == -2);
-
-        f = -1.00001;
-        floored = floor(f, s32, .TOWARD_ZERO);
-        ceiled = ceil(f, s32, .TOWARD_POSITIVE_INFINITY);
-        rounded = round(f);
-        test_condition(floored == -1);
-        test_condition(ceiled == -1);
-        test_condition(rounded == -1);
-        floored = floor(f, s32, .TOWARD_NEGATIVE_INFINITY);
-        ceiled = ceil(f, s32, .AWAY_FROM_ZERO);
-        test_condition(floored == -2);
-        test_condition(ceiled == -2);
-    }
-    {
         a: s32 = 8;
         b := ceil_to_multiple(a, 8);
         c := floor_to_multiple(a, 8);
