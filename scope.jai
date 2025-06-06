@@ -19,12 +19,11 @@ scope_lock_mutex :: (mutex: *Mutex) #expand {
 // ...
 scope_setup :: ($init_proc: ()->bool, $deinit_proc: (), continue_setup: *bool) #expand {
     if !continue_setup.* then return;
-    #if init_proc {
-        continue_setup.* = init_proc();
-    } else {
-        continue_setup.* = true;
+    continue_setup.* = init_proc();
+    if !continue_setup.* {
+        rm_log("setup failed. aborting.");
+        return;
     }
-    if !continue_setup.* then return;
     #if deinit_proc then `defer deinit_proc();
 }
 
