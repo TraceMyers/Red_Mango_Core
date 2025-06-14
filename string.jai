@@ -54,6 +54,17 @@ as_string :: inline (array: []$T) -> string {
     return string.{array.count * size_of(T), xx array.data};
 }
 
+as_string :: inline (item: $T) -> string 
+#modify {
+    info := cast(*Type_Info)T;
+    if info.type == .ARRAY {
+        return false;
+    }
+    return true;
+} {
+    return string.{size_of(T), xx *item};
+}
+
 to_lower :: inline (str: string, allocator := context.allocator) -> string {
     out_str := alloc_string(str.count,,allocator);
     for str {
@@ -214,3 +225,20 @@ c_strings_equal :: (a: *u8, b: *u8, max_read_count: s64) -> bool {
     return true;
 }
 
+tokenize_and_trim :: (s: string, separator: u8) -> []string {
+    strings := split(s, separator);
+    for *strings {
+        it.* = trim(it.*);
+    }
+    for #v2 < 0..strings.count-1 {
+        if strings[it].count == 0 {
+            if it < strings.count - 1 {
+                for i : it..strings.count-2 {
+                    strings[i] = strings[i+1];
+                }
+            }
+            strings.count -= 1;
+        }
+    }
+    return strings;
+}

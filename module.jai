@@ -1,3 +1,10 @@
+
+#module_parameters()(
+    FORE_X := 1.0,      FORE_Y := 0.0,      FORE_Z := 0.0,
+    RIGHT_X := 0.0,     RIGHT_Y := -1.0,    RIGHT_Z := 0.0,
+    UP_X := 0.0,        UP_Y := 0.0,        UP_Z := 1.0
+); 
+
 #load "meta.jai";
 #load "testing.jai";
 #load "bit_array.jai";
@@ -20,6 +27,10 @@ RUN_TESTS :: false;
 SAFE_TEXT_ENCODING :: true;
 SERIALIZE_DEBUG :: false;
 NESTING_ALLOCATOR_DEBUG :: false;
+
+MANGO_FORE  :: Vector3.{FORE_X, FORE_Y, FORE_Z};
+MANGO_RIGHT :: Vector3.{RIGHT_X, RIGHT_Y, RIGHT_Z};
+MANGO_UP    :: Vector3.{UP_X, UP_Y, UP_Z};
 
 #scope_module // -------------------------------------------------------------------------------------------- { MODULE }
 

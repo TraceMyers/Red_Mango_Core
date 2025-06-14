@@ -1,3 +1,6 @@
+QUATERNION_IDENTITY :: Quaternion.{0,0,0,1};
+VectorTypes :: Type.[Vector2, Vector3, Vector4, Quaternion];  // Used for type restriction in normalize().
+
 div_ceil :: inline (a: $Int_Type, b: Int_Type) -> Int_Type 
 #modify {
     return is_int_type(Int_Type);
@@ -151,3 +154,138 @@ do_ranges_overlap :: inline (x1: $T, x2: T, y1: T, y2: T) -> bool {
     return y2 >= x1 && y1 <= x2;
 }
 
+make_quat :: (forward: Vector3, up: Vector3) -> Quaternion {
+    right := cross(forward, up);
+    assert(is_normalized(forward,0.001));
+    assert(is_normalized(right,0.001));
+    assert(is_normalized(up,0.001));
+    rot_matrix := Matrix3.{
+        forward.x, -right.x, up.x,
+        forward.y, -right.y, up.y,
+        forward.z, -right.z, up.z,
+    };
+    return get_rotation(rot_matrix);
+}
+
+set_orientation :: (out_orientation: *Quaternion, forward: Vector3, up: Vector3) {
+    right := cross(forward, up);
+    assert(is_normalized(forward,0.001));
+    assert(is_normalized(right,0.001));
+    assert(is_normalized(up,0.001));
+    rot_matrix := Matrix3.{
+        forward.x, -right.x, up.x,
+        forward.y, -right.y, up.y,
+        forward.z, -right.z, up.z,
+    };
+    out_orientation.* = get_rotation(rot_matrix);
+}
+
+rotate :: (in_out_orientation: *Quaternion, axis: Vector3, angle: float32) {
+    assert(is_normalized(axis));
+    ht := angle * 0.5;
+    rot_quat := Quaternion.{xyz=axis*sin(ht), w=cos(ht)};
+    in_out_orientation.* = rot_quat * in_out_orientation.*;
+}
+
+rotate :: inline (v: Vector3, axis: Vector3, angle: float32) -> Vector3 {
+    assert(is_normalized(axis));
+    ht := angle * 0.5;
+    rot_quat := Quaternion.{xyz=axis*sin(ht), w=cos(ht)};
+    return rotate(v, rot_quat);
+}
+
+right_direction :: inline (q: *Quaternion) -> Vector3 {
+    return rotate(MANGO_RIGHT, q);
+}
+
+right_direction_xy :: inline (q: *Quaternion) -> Vector3 {
+    right_3d := right_direction(e);
+    right_3d.z = 0;
+    return normalize(right_3d);
+}
+
+up_direction :: inline (q: *Quaternion) -> Vector3 {
+    return rotate(MANGO_UP, q);
+}
+
+fore_direction :: inline (q: *Quaternion) -> Vector3 {
+    return rotate(MANGO_FORE, q);
+}
+
+distance_squared :: inline (q1: Quaternion, q2: Quaternion) -> float {
+    diff := Vector4.{
+        q1.x - q2.x,
+        q1.y - q2.y,
+        q1.z - q2.z,
+        q1.w - q2.w,
+    };
+    return length_squared(diff);
+}
+
+distance :: inline (q1: Quaternion, q2: Quaternion) -> float {
+    diff := Vector4.{
+        q1.x - q2.x,
+        q1.y - q2.y,
+        q1.z - q2.z,
+        q1.w - q2.w,
+    };
+    return length(diff);
+}
+
+interp_rotate :: (origin: Quaternion, target: Quaternion, norm: float32) -> Quaternion {
+    assert(norm >= 0.0 && norm <= 1.0);
+    // small distances can be lerped without being able to tell the difference
+    dp := dot(origin, target);
+    use_target := ifx dp < 0 then -target else target;
+    rot_dist_sq := distance_squared(origin, use_target);
+    if rot_dist_sq <= 0.0001 {
+        return target;
+    }
+    if rot_dist_sq < 0.15 {
+         return lerp(origin, use_target, norm);
+    } else return slerp(origin, use_target, norm);
+}
+
+interp_rotate :: (origin: Quaternion, target: Quaternion, speed: float32, delta_time: float32) -> Quaternion {
+    rot_dist := speed * delta_time;
+    cos_ht := abs(dot(origin, target));
+    // todo: prob don' need to do acos here and in slerp
+    t := 2.0 * acos(cos_ht);
+    if abs(rot_dist) >= t {
+        return target;
+    } 
+    return interp_rotate(origin, target, rot_dist / t);
+}
+
+// todo do these work???
+// ------------------
+smoothstep :: (a: float, b: float, x: float) -> float {
+    denom_1 := (b - a) * (b - a);
+    denom_2 := denom_1 * (b - a);
+    numerator_1 := (x - a) * (x - a);
+    numerator_2 := numerator_1 * (x - a);
+    return 3.0 * (numerator_1 / denom_1) - 2.0 * (numerator_2 / denom_2);
+}
+
+smoothstep :: (a: $T/VectorTypes, b: T, x: float32) -> T {
+    out_vec: T = ---;
+    out_vec.x = smoothstep(a.x, b.x, x);
+    out_vec.y = smoothstep(a.y, b.y, x);
+    #if out_vec.component.count >= 3 {
+        out_vec.z = smoothstep(a.z, b.z, x);
+    }
+    #if out_vec.component.count == 4 {
+        out_vec.w = smoothstep(a.w, b.w, x);
+    }
+    return out_vec;
+}
+// ------------------
+
+smoothstep :: (x: float) -> float {
+    return 3.0 * x * x - 2.0 * x * x * x;
+}
+
+exponential_interp :: (a: $T/VectorTypes, b: T, speed: float32, delta_time: float32) -> T {
+    move_factor := min(speed * delta_time, 1.0);
+    return a + (b - a) * move_factor;
+}

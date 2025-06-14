@@ -24,6 +24,8 @@ report_impl :: (
     caller_loc: Source_Code_Location, 
     header: string
 ) {
+    auto_release_temp();
+
     MAX_HEADER_COUNT :: 8;
     MAX_CONTEXT_COUNT :: 32;
     BRACKETS_COUNT :: 4;
