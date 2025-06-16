@@ -32,8 +32,10 @@ build_nesting_allocator_books :: (using allocator: *Nesting_Allocator($MIN_ALLOC
     out_books.gap_list_of_lists = alloc_array([]u8, chunk_lists.count, temp);
     out_books.flag_list_of_lists = alloc_array([]u64, chunk_lists.count, temp);
 
-    lists_data := books.largest_gap_per_list.data + chunk_lists.count;
-    offset := chunk_lists.count;
+    gaps_data_size := chunk_lists.count;
+    lists_data := books.largest_gap_per_list.data + gaps_data_size;
+    offset := gaps_data_size;
+
     if chunk_lists.count > 0 {
         for 0..chunk_lists.count-1 {
             out_books.gap_list_of_lists[it].data = xx offset;
@@ -148,12 +150,11 @@ grow_nesting_allocator_books :: (using allocator: *Nesting_Allocator($MIN_ALLOCA
     scope_set_allocator(parent_allocator);
     auto_release_temp();
     assert(chunk_lists.count > 0);
-    old_chunk_list_gaps_offset, old_chunk_gaps_offset, old_flags_offset: s64 = ---;
-    new_chunk_list_gaps_offset, new_chunk_gaps_offset, new_flags_offset: s64 = ---;
-    old_chunk_list_gaps_offset = 0;
-    new_chunk_list_gaps_offset = 0;
+    old_chunk_list_gaps_offset, old_chunk_gaps_offset, old_flags_offset: s64;
+    new_chunk_list_gaps_offset, new_chunk_gaps_offset, new_flags_offset: s64;
 
-    old_alloc_size := chunk_lists.count;
+    old_alloc_size := chunk_lists.count - 1;
+    assert(old_alloc_size >= 0);
     old_chunk_gaps_offset = old_alloc_size;
     // one added chunk list
     new_alloc_size := old_alloc_size + 1;
@@ -173,12 +174,14 @@ grow_nesting_allocator_books :: (using allocator: *Nesting_Allocator($MIN_ALLOCA
     old_alloc_size += old_outer_chunk_count;
     new_alloc_size += new_outer_chunk_count;
 
-    // 8 byte align
-    old_flags_offset = ceil_to_multiple(old_alloc_size, 8);
-    old_alloc_size = old_flags_offset;
-    // one 64 bit flag set per chunk
-    old_flags_size := old_outer_chunk_count * 8;
-    old_alloc_size += old_flags_size;
+    if old_alloc_size > 0 {
+        // 8 byte align
+        old_flags_offset = ceil_to_multiple(old_alloc_size, 8);
+        old_alloc_size = old_flags_offset;
+        // one 64 bit flag set per chunk
+        old_flags_size := old_outer_chunk_count * 8;
+        old_alloc_size += old_flags_size;
+    }
 
     new_flags_offset = ceil_to_multiple(new_alloc_size, 8);
     new_alloc_size = new_flags_offset;
@@ -204,11 +207,19 @@ grow_nesting_allocator_books :: (using allocator: *Nesting_Allocator($MIN_ALLOCA
         new_ptr := alloc(new_alloc_size_mul2);
         books_allocated_size = new_alloc_size_mul2;
         old_ptr := books.largest_gap_per_list.data;
+        copy_old_data := old_ptr != null;
+        if copy_old_data {
+            assert(chunk_list_gaps_copy_size != 0 && chunk_gaps_copy_size != 0 && flags_copy_size != 0);
+        } else {
+            assert(chunk_list_gaps_copy_size == 0 && chunk_gaps_copy_size == 0 && flags_copy_size == 0);
+        }
         if books.largest_gap_per_list.count > 0 {
-            memcpy(new_ptr,                         old_ptr,                            chunk_list_gaps_copy_size);
-            memcpy(new_ptr + new_chunk_gaps_offset, old_ptr + old_chunk_gaps_offset,    chunk_gaps_copy_size);
-            memcpy(new_ptr + new_flags_offset,      old_ptr + old_flags_offset,         flags_copy_size);
-            free(old_ptr);
+            if copy_old_data {
+                memcpy(new_ptr,                         old_ptr,                            chunk_list_gaps_copy_size);
+                memcpy(new_ptr + new_chunk_gaps_offset, old_ptr + old_chunk_gaps_offset,    chunk_gaps_copy_size);
+                memcpy(new_ptr + new_flags_offset,      old_ptr + old_flags_offset,         flags_copy_size);
+                free(old_ptr);
+            }
         }
 
         books_data = new_ptr;

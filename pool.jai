@@ -18,6 +18,13 @@ set_capacity :: (using pool: *Pool($T), cap: s64) {
     set_capacity(*in_use, cap);    
 }
 
+lock_allocation :: (using pool: *Pool($T)) {
+    items.allocator = no_allocator;
+    in_use.items.allocator = no_allocator;
+    allow_grow_default = false;
+    allow_shrink_default = false;
+}
+
 reset :: (using pool: *Pool($T), deinit_item_proc: (*T) = null, keep_memory := false) {
     if in_use.group_count > 0 {
         assert(items.count == in_use.group_count);

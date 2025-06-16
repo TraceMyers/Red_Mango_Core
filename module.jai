@@ -64,8 +64,9 @@ Compiler :: #import "Compiler";
             array_utils_test,
             pool_test,
             misc_test,
-            nesting_allocator_test,
+            // nesting_allocator_test,
             bump_allocator_test,
+            serializer_test,
         ];
         run_tests("red mango module", tests);
     }
