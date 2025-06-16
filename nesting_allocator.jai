@@ -1,24 +1,23 @@
 
-NESTING_ALLOCATOR_MIN_ALLOCATION_SIZE :: 16;
+// todo: 
 
-// a very large allocation can just lay down > 64 bits. just let them own multiples of 1KB,
-// aligned to 1KB.
-
-Nesting_Allocator_Outer_Chunk :: struct {
-    inner_chunks: [64][NESTING_ALLOCATOR_MIN_ALLOCATION_SIZE]u8;
+Nesting_Allocator_Outer_Chunk :: struct ($MIN_ALLOCATION_SIZE: s64) {
+    inner_chunks: [64][MIN_ALLOCATION_SIZE]u8;
 }
 
-Nesting_Allocator :: struct {
+Nesting_Allocator :: struct ($MIN_ALLOCATION_SIZE := 16) {
     using #as base: Allocator;
-    chunk_lists: [..][]Nesting_Allocator_Outer_Chunk;
+    parent_allocator: Allocator;
+    chunk_lists: [..][]Nesting_Allocator_Outer_Chunk(MIN_ALLOCATION_SIZE);
     books: Nesting_Allocator_Books;
     books_allocated_size: s64;
     default_outer_chunk_count_per_list: s32 = 32;
     shrink_to_min_lists: s32 = 1;
+    default_reserve_size: s32;
 
     CHUNKS_PER_HEAP :: 64;
-    CHUNK_SIZE :: size_of(Nesting_Allocator_Outer_Chunk);
-    #run assert(is_power_of_two(NESTING_ALLOCATOR_MIN_ALLOCATION_SIZE));
+    CHUNK_SIZE :: size_of(Nesting_Allocator_Outer_Chunk(MIN_ALLOCATION_SIZE));
+    #run assert(is_power_of_two(MIN_ALLOCATION_SIZE));
 }
 
 Nesting_Allocator_Books :: struct {
@@ -27,7 +26,7 @@ Nesting_Allocator_Books :: struct {
     flag_list_of_lists: [][]u64;
 }
 
-build_nesting_allocator_books :: (using allocator: *Nesting_Allocator, out_books: *Nesting_Allocator_Books) -> s64 {
+build_nesting_allocator_books :: (using allocator: *Nesting_Allocator($MIN_ALLOCATION_SIZE), out_books: *Nesting_Allocator_Books) -> s64 {
     out_books.largest_gap_per_list.data = null;
     out_books.largest_gap_per_list.count = chunk_lists.count;
     out_books.gap_list_of_lists = alloc_array([]u8, chunk_lists.count, temp);
@@ -54,39 +53,47 @@ build_nesting_allocator_books :: (using allocator: *Nesting_Allocator, out_books
     return out_books.gap_list_of_lists.count * size_of([]u8) + out_books.flag_list_of_lists.count * size_of([]u64);
 }
 
-initialize_nesting_allocator :: (using allocator: *Nesting_Allocator, in_default_reserve_size := 0) {
+initialize_nesting_allocator :: (using allocator: *Nesting_Allocator($MIN_ALLOC_SIZE), in_parent_allocator: Allocator, in_default_chunk_list_size := 0, add_chunk_lists := 1) {
     assert(chunk_lists.count == 0 && chunk_lists.data == null);
-    proc = nesting_allocator_proc;
+    allocator.* = .{};
+    proc = #bake_arguments nesting_allocator_proc(min_alloc_size=MIN_ALLOC_SIZE);
     data = allocator;
-    if in_default_reserve_size > 0 {
-        default_reserve_size = in_default_reserve_size;
+    parent_allocator = in_parent_allocator;
+    if in_default_chunk_list_size > 0 {
+        default_reserve_size = xx in_default_chunk_list_size;
     } else {
-        default_reserve_size = CHUNK_SIZE * 32;
+        default_reserve_size = xx (CHUNK_SIZE * 64);
     }
-    add_chunk_list(allocator, default_reserve_size);
+    if add_chunk_lists > 0 {
+        for 0..add_chunk_lists - 1 {
+            add_chunk_list(allocator, default_reserve_size);
+        }
+    }
 }
 
-add_chunk_list :: (using allocator: *Nesting_Allocator, min_bytes: s64) {
-    scope_set_allocator(context.default_allocator);
+add_chunk_list :: (using allocator: *Nesting_Allocator($MIN_ALLOC_SIZE), min_bytes: s64) {
+    scope_set_allocator(parent_allocator);
     chunk_list := array_add(*chunk_lists);
     alloc_chunk_count := max(div_ceil(min_bytes, CHUNK_SIZE), 2);
     if alloc_chunk_count < 8 && !did_small_chunk_count_warning {
         rm_warning("min bytes % leads to only % chunks being allocated per nesting allocator heap. the number of chunks per heap should probably be somewhere between 8 and 128", min_bytes, alloc_chunk_count);
         did_small_chunk_count_warning = true;
     }
-    chunk_list.* = alloc_array(Nesting_Allocator_Outer_Chunk, alloc_chunk_count);
+    chunk_list.* = alloc_array(Nesting_Allocator_Outer_Chunk(MIN_ALLOC_SIZE), alloc_chunk_count);
     // zero_array(chunk_list.*); // shouldn't need this
     grow_nesting_allocator_books(allocator);    
 }
 
-nesting_allocator_proc :: (mode: Allocator_Mode, size: s64, old_size: s64, old_memory: *void, allocator_data: *void) -> *void {
+nesting_allocator_proc :: (mode: Allocator_Mode, size: s64, old_size: s64, old_memory: *void, allocator_data: *void, $min_alloc_size: s64) -> *void {
+    Nesting_Allocator_Type :: #run Nesting_Allocator(min_alloc_size);
+    nesting_allocator := allocator_data.(*Nesting_Allocator_Type);
     if mode == {
     case .ALLOCATE;
-        return nesting_allocator_allocate(xx allocator_data, size);
+        return nesting_allocator_allocate(nesting_allocator, size);
     case .RESIZE;
-        return nesting_allocator_resize(xx allocator_data, size, old_size, old_memory);
+        return nesting_allocator_resize(nesting_allocator, size, old_size, old_memory);
     case .FREE;
-        nesting_allocator_free(xx allocator_data, old_memory);
+        nesting_allocator_free(nesting_allocator, old_memory);
     case .SHUTDOWN;
         nesting_allocator_shutdown();
     case;
@@ -95,9 +102,9 @@ nesting_allocator_proc :: (mode: Allocator_Mode, size: s64, old_size: s64, old_m
     return null;
 }
 
-nesting_allocator_allocate :: (using allocator: *Nesting_Allocator, size: s64) -> *void {
-    alloc_inner_chunk_count := div_ceil(size, NESTING_ALLOCATOR_MIN_ALLOCATION_SIZE);
-    assert(alloc_inner_chunk_count < 64);
+nesting_allocator_allocate :: (using allocator: *Nesting_Allocator($MIN_ALLOC_SIZE), size: s64) -> *void {
+    alloc_inner_chunk_count := div_ceil(size, MIN_ALLOC_SIZE);
+    assert(alloc_inner_chunk_count <= 64);
     alloc_mask: u64 = ((1).(u64) << alloc_inner_chunk_count) - (1).(u64);
     for *largest_gap : books.largest_gap_per_list {
         if largest_gap.* < alloc_inner_chunk_count {
@@ -121,25 +128,25 @@ nesting_allocator_allocate :: (using allocator: *Nesting_Allocator, size: s64) -
     }
     
     // didn't find existing space, need to grow
-    add_chunk_list(allocator, size);
-
+    add_chunk_list(allocator, max(size, default_reserve_size));
 
     return null;
 }
 
-nesting_allocator_resize :: (using allocator: *Nesting_Allocator, size: s64, old_size: s64, old_memory: *void) -> *void {
+nesting_allocator_resize :: (using allocator: *Nesting_Allocator($MIN_ALLOC_SIZE), size: s64, old_size: s64, old_memory: *void) -> *void {
     return null;
 }
 
-nesting_allocator_free :: (using allocator: *Nesting_Allocator, old_memory: *void) {
+nesting_allocator_free :: (using allocator: *Nesting_Allocator($MIN_ALLOC_SIZE), old_memory: *void) {
 }
 
 nesting_allocator_shutdown :: () {
 }
 
 // assumes the number of chunk_lists has grown by 1
-grow_nesting_allocator_books :: (using allocator: *Nesting_Allocator) {
-    scope_set_allocator(context.default_allocator);
+grow_nesting_allocator_books :: (using allocator: *Nesting_Allocator($MIN_ALLOCATION_SIZE)) {
+    scope_set_allocator(parent_allocator);
+    auto_release_temp();
     assert(chunk_lists.count > 0);
     old_chunk_list_gaps_offset, old_chunk_gaps_offset, old_flags_offset: s64 = ---;
     new_chunk_list_gaps_offset, new_chunk_gaps_offset, new_flags_offset: s64 = ---;

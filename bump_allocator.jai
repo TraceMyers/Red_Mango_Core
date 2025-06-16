@@ -40,9 +40,9 @@ bump_allocator_proc :: (mode: Allocator_Mode, size: s64, old_size: s64, old_memo
     case .FREE;
         // could be useful for debug
     case .CREATE_HEAP;
-        bump_allocator_initialize(xx allocator_data);
+        // bump_allocator_initialize(xx allocator_data);
     case .DESTROY_HEAP;
-        bump_allocator_reset(xx allocator_data);
+        bump_allocator_reset(xx allocator_data, false);
     }
     return null;
 }

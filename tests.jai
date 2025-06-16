@@ -525,14 +525,19 @@ pool_test :: () -> bool, string {
     return_test_success();
 }
 
-// nesting_allocator_test :: () -> bool, string {
-    // a: Nesting_Allocator;
-    // initialize_nesting_allocator(*a, 16385);
-    // test_condition(a.chunk_lists.count == 1);
-    // test_condition(a.chunk_lists[0].count == 17);
-//
-    // return_test_success();
-// }
+nesting_allocator_test :: () -> bool, string {
+    a: Nesting_Allocator;
+    initialize_nesting_allocator(*a, context.default_allocator, 16385);
+    test_condition(a.chunk_lists.count == 1);
+    test_condition(a.chunk_lists[0].count == 17);
+
+    data_1 := nesting_allocator_allocate(*a, 129);
+    test_condition(data_1 == *a.chunk_lists[0][0]);
+    // 128 / 16 = 8 -> divceil(129/16) = 9 
+    test_condition(a.books.flag_list_of_lists[0][0] == 0x1ff);
+
+    return_test_success();
+}
 
 bump_allocator_test :: () -> bool, string {
     b: Bump_Allocator;

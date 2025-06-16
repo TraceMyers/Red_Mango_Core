@@ -1,3 +1,7 @@
+KILOBYTE :: 1024;
+MEGABYTE :: 1024 * 1024;
+GIGABYTE :: 1024 * 1024 * 1024;
+
 is_number_type :: (In_Type: Type) -> bool {
     return (cast(*Type_Info)In_Type).type == .INTEGER || (cast(*Type_Info)In_Type).type == .FLOAT;
 }

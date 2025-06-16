@@ -199,9 +199,15 @@ right_direction :: inline (q: *Quaternion) -> Vector3 {
 }
 
 right_direction_xy :: inline (q: *Quaternion) -> Vector3 {
-    right_3d := right_direction(e);
+    right_3d := right_direction(q);
     right_3d.z = 0;
     return normalize(right_3d);
+}
+
+fore_direction_xy :: inline (q: *Quaternion) -> Vector3 {
+    fore_3d := fore_direction(q);
+    fore_3d.z = 0;
+    return normalize(fore_3d);
 }
 
 up_direction :: inline (q: *Quaternion) -> Vector3 {
