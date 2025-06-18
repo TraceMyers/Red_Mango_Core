@@ -525,19 +525,18 @@ pool_test :: () -> bool, string {
     return_test_success();
 }
 
-nesting_allocator_test :: () -> bool, string {
+nesting_allocator_test :: no_inline () -> bool, string {
     a: Nesting_Allocator;
     initialize_nesting_allocator(*a, context.default_allocator, 16385);
     test_condition(a.chunk_lists.count == 1);
     test_condition(a.chunk_lists[0].count == 17);
 
-    // data_1 := nesting_allocator_allocate(*a, 129);
-    // test_condition(data_1 == *a.chunk_lists[0][0]);
-    // 128 / 16 = 8 -> divceil(129/16) = 9 
-    // rm_log("data: %, cl0: %", data_1, *a.chunk_lists[0][0]);
-    rm_log("cl0: %", *a.chunk_lists[0][0]);
-    rm_log("flags: %", a.books.flag_list_of_lists[0][0]);
-    // test_condition(a.books.flag_list_of_lists[0][0] == 0x1ff);
+    data_1 := nesting_allocator_allocate(*a, 129);
+    test_condition(data_1 == *a.chunk_lists[0][0]);
+    test_condition(a.books.flag_list_of_lists[0][0] == 0x1ff);
+
+    data_2 := nesting_allocator_allocate(*a, 880);
+    test_condition(a.books.flag_list_of_lists[0][0] == U64_MAX);
 
     return_test_success();
 }

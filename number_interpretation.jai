@@ -22,14 +22,26 @@ max_value :: inline (number: $Number_Type) -> Number_Type #expand {
     return max_value(type_of(number));
 }
 
+// ceil to a multiple of a power of 2
+// todo: rename to something better
 pow2_align_ceil :: inline (n: $T, power_of_two_size: s64) -> T {
     assert(is_power_of_two(power_of_two_size));
     return (n + power_of_two_size-1) & ~(power_of_two_size-1);
 }
 
+// floor to a multiple of a power of 2
+// todo: rename to something better
 pow2_align_floor :: inline (n: $T, power_of_two_size: s64) -> T {
     assert(is_power_of_two(power_of_two_size));
     return n & ~(power_of_two_size-1);
+}
+
+ceil_to_power_of_two :: inline (n: $T) -> T {
+    if n == 0 {
+        return 0;
+    } else if !is_power_of_two(n) {
+        return 1 << (32 - bit_scan_reverse(n));
+    } else return n;
 }
 
 is_multiple_of_type_size :: (number: $AnyInt, $RelevantType: Type) -> bool {

@@ -14,6 +14,23 @@ rm_log :: (fmt: string, args: ..Any, log_location := false, caller_loc := #calle
     report_impl(fmt, ..args, log_context=log_context, log_location, caller_loc, header);
 }
 
+rm_log_ints :: ($vars: ..Code, base := 10, minimum_digits := 1, log_location := false, caller_loc := #caller_location, header := "LOG") #expand {
+    #insert -> string {
+        builder: String_Builder;
+        print_to_builder(*builder, "FMT :: \"");
+        for vars {
+            print_to_builder(*builder, "%: \%, ", code_string(it));
+        }
+        print_to_builder(*builder, "\";\n");
+        print_to_builder(*builder, "rm_log(FMT, ");
+        for vars {
+            print_to_builder(*builder, "FormatInt.{value=`%, base=base, minimum_digits=minimum_digits}, ", code_string(it));
+        }
+        print_to_builder(*builder, "log_location=log_location, caller_loc=caller_loc, header=header);\n");
+        return builder_to_string(*builder);
+    };
+}
+
 #scope_file // ------------------------------------------------------------------------------------------------ { FILE }
 
 report_impl :: (

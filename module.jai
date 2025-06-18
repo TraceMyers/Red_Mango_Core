@@ -28,11 +28,26 @@ UP_X :: 0.0;        UP_Y :: 0.0;        UP_Z :: 1.0;
 #load "bump_allocator.jai";
 #load "file.jai";
 #load "no_allocator.jai";
+#load "bin_pool.jai";
+
+// useful token to represent an index to an array, the elements of which are uniquely id'd. so, you use
+// the index to get the element, and the id to verify that the element is the expected one. this approach
+// is very valuable for a balance of performance and safety in many situations.
+ID_Ref :: struct {
+    index: s32 = -1;
+    id: u32;
+}
+
+ID_Ref64 :: struct {
+    index: s64 = -1;
+    id: u64;
+}
 
 RUN_TESTS :: true;
 SAFE_TEXT_ENCODING :: true;
 SERIALIZE_DEBUG :: false;
 NESTING_ALLOCATOR_DEBUG :: false;
+BIN_POOL_DEBUG :: false;
 
 MANGO_FORE  :: Vector3.{FORE_X, FORE_Y, FORE_Z};
 MANGO_RIGHT :: Vector3.{RIGHT_X, RIGHT_Y, RIGHT_Z};
@@ -64,7 +79,7 @@ Compiler :: #import "Compiler";
             array_utils_test,
             pool_test,
             misc_test,
-            // nesting_allocator_test,
+            nesting_allocator_test,
             bump_allocator_test,
             serializer_test,
         ];

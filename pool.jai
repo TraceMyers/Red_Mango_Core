@@ -26,9 +26,9 @@ lock_allocation :: (using pool: *Pool($T)) {
 }
 
 reset :: (using pool: *Pool($T), deinit_item_proc: (*T) = null, keep_memory := false) {
-    if in_use.group_count > 0 {
-        assert(items.count == in_use.group_count);
-        for 0..in_use.group_count-1 {
+    if in_use.items.count > 0 {
+        assert(items.count <= get_group_count(*in_use));
+        for 0..items.count-1 {
             if bit_is_set(*in_use, it) {
                 deinit_item_proc(*items[it]);
             }
@@ -111,7 +111,7 @@ operator *[] :: inline (using pool: *Pool($T), i: s64) -> *T {
 }
 
 get_item :: inline (using pool: *Pool($T), i: s64) -> *T {
-    return pool[i];
+    return *items[i];
 }
 
 find_item :: (using pool: *Pool($T1), user_data: $T2, compare_proc: (*T1, T2) -> bool) -> s64 {

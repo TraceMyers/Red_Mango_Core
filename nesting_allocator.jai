@@ -109,12 +109,12 @@ nesting_allocator_allocate :: (using allocator: *Nesting_Allocator($MIN_ALLOC_SI
     assert(alloc_inner_chunk_count <= 64);
     alloc_mask: u64 = ((1).(u64) << alloc_inner_chunk_count) - (1).(u64);
     for *largest_gap : books.largest_gap_per_list {
-        if largest_gap.* < alloc_inner_chunk_count {
+        if largest_gap.* >= alloc_inner_chunk_count {
             max_gap: u8;
             data: *void;
             outer_list_index := it_index; 
             for *gap : books.gap_list_of_lists[outer_list_index] {
-                if data == null && gap.* < alloc_inner_chunk_count {
+                if data == null && gap.* >= alloc_inner_chunk_count {
                     flag_set := *books.flag_list_of_lists[outer_list_index][it_index];
                     alloc_index := find_index_of_missing_bit_sequence_lsb(flag_set.*, alloc_mask, alloc_inner_chunk_count);
                     flag_set.* |= alloc_mask << alloc_index;
@@ -148,7 +148,7 @@ nesting_allocator_shutdown :: () {
 // assumes the number of chunk_lists has grown by 1
 grow_nesting_allocator_books :: (using allocator: *Nesting_Allocator($MIN_ALLOCATION_SIZE)) {
     scope_set_allocator(parent_allocator);
-    auto_release_temp();
+    // auto_release_temp();
     assert(chunk_lists.count > 0);
     old_chunk_list_gaps_offset, old_chunk_gaps_offset, old_flags_offset: s64;
     new_chunk_list_gaps_offset, new_chunk_gaps_offset, new_flags_offset: s64;

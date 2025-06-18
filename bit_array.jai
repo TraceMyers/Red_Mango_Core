@@ -2,19 +2,34 @@
 Bit_Array :: struct($IN_GROUP_BIT_COUNT: int) {
     #run,stallable assert(is_power_of_two(IN_GROUP_BIT_COUNT) && IN_GROUP_BIT_COUNT <= 64);
     items: [..]u64;
-    group_count: s64;
+    groups_bit_size: s32;
     GROUP_BIT_COUNT :: IN_GROUP_BIT_COUNT;
     GROUPS_PER_U64 :: 64 / GROUP_BIT_COUNT;
     GROUP_INDEXING_SHIFT :: #run,stallable _bit_scan_forward(GROUPS_PER_U64) - 1;
     GROUP_BASE_MASK :: #run,stallable bit_array_group_base_mask(IN_GROUP_BIT_COUNT);
 }
 
+set_capacity :: inline (using array: *Bit_Array($COUNT), in_group_count: s64) {
+    groups_bit_size = xx (in_group_count * GROUP_BIT_COUNT);
+    items_count := div_ceil(in_group_count, GROUPS_PER_U64);
+    array_resize(*items, items_count);
+}
+
+add_bit_set :: (using array: *Bit_Array($COUNT)) {
+    _ := array_add(*items);
+    groups_bit_size = items.count * GROUPS_PER_U64;
+}
+
 bit_array_group_base_mask :: inline (bit_group_count: int) -> u64  {
     return ifx bit_group_count == 64 then (~0).(u64) else ((1 << bit_group_count) - 1).(u64,force);
 }
 
+get_group_count :: inline (using array: *Bit_Array($COUNT)) -> s64 {
+    return groups_bit_size / GROUP_BIT_COUNT;
+}
+
 single_bit_mask :: inline (using array: *Bit_Array($COUNT), group: s64, in_group_index: s64) -> s64, u64 {
-    assert(group < group_count);
+    assert(group < get_group_count(array));
     assert(in_group_index >= 0 && in_group_index <= GROUP_BIT_COUNT);
     items_index := group >> GROUP_INDEXING_SHIFT;
     truncated_group_index := items_index << GROUP_INDEXING_SHIFT;
@@ -24,7 +39,7 @@ single_bit_mask :: inline (using array: *Bit_Array($COUNT), group: s64, in_group
 }
 
 group_bit_mask :: inline (using array: *Bit_Array($COUNT), group: s64) -> s64, u64 {
-    assert(group < group_count);
+    assert(group < get_group_count(array));
     items_index := group >> GROUP_INDEXING_SHIFT;
     truncated_group_index := items_index << GROUP_INDEXING_SHIFT;
     group_index_in_u64 := group - truncated_group_index;
@@ -32,52 +47,45 @@ group_bit_mask :: inline (using array: *Bit_Array($COUNT), group: s64) -> s64, u
 }
 
 set_bit :: inline (using array: *Bit_Array($COUNT), group: s64, in_group_index := 0) {
-    assert(group < group_count);
+    assert(group < get_group_count(array));
     index, mask := single_bit_mask(array, group, in_group_index);
     items[index] |= mask;
 }
 
 unset_bit :: inline (using array: *Bit_Array($COUNT), group: s64, in_group_index := 0) {
-    assert(group < group_count);
+    assert(group < get_group_count(array));
     index, mask := single_bit_mask(array, group, in_group_index);
     items[index] &= ~mask;
 }
 
 bit_is_set :: inline (using array: *Bit_Array($COUNT), group: s64, in_group_index := 0) -> bool {
-    assert(group < group_count);
+    assert(group < get_group_count(array));
     index, mask := single_bit_mask(array, group, in_group_index);
     return (items[index] & mask) != 0;
 }
 
 set_bit_group :: inline (using array: *Bit_Array($COUNT), group: s64) {
-    assert(group < group_count);
+    assert(group < get_group_count(array));
     index, mask := group_bit_mask(array, group);
     items[index] |= mask;
 }
 
 unset_bit_group :: inline (using array: *Bit_Array($COUNT), group: s64) {
-    assert(group < group_count);
+    assert(group < get_group_count(array));
     index, mask := group_bit_mask(array, group);
     items[index] &= ~mask;
 }
 
 any_bits_in_group_set :: inline (using array: *Bit_Array($COUNT), group: s64) -> bool {
-    assert(group < group_count);
+    assert(group < get_group_count(array));
     index, mask := group_bit_mask(array, group);
     return (items[index] & mask) != 0;
 }
 
 all_bits_in_group_set :: inline (using array: *Bit_Array($COUNT), group: s64) -> bool {
-    assert(group < group_count);
+    assert(group < get_group_count(array));
     index, mask := group_bit_mask(array, group);
     return (items[index] & mask) == mask;
-}
-
-set_capacity :: inline (using array: *Bit_Array($COUNT), in_group_count: s64) {
-    // might be one more than we need but it's fine
-    items_count := (in_group_count >> GROUP_INDEXING_SHIFT) + 1;
-    group_count = in_group_count;
-    array_resize(*items, items_count);
 }
 
 set_all :: inline (using array: *Bit_Array($COUNT)) {
@@ -98,7 +106,6 @@ reset :: inline (using array: *Bit_Array($COUNT), keep_memory := false) {
     } else {
         array_reset(*items);
     }
-    group_count = 0;
 }
 
 // if in_group_index == -1, search for a group with any unset bits. else, search for a group with a bit unset at in_group_index
@@ -128,9 +135,9 @@ find_first_group_with_unset_bits :: (using array: *Bit_Array($COUNT), in_group_i
     first_bit_collection_with_ignored_groups := items[start_item] | ignore_groups_mask;
     if (first_bit_collection_with_ignored_groups & collection_mask) != collection_mask {
         #if GROUPS_PER_U64 == 64 {
-            return_group_index_1_bit_groups(group_count, first_bit_collection_with_ignored_groups, start_item, true, true);
+            return_group_index_1_bit_groups(get_group_count(array), first_bit_collection_with_ignored_groups, start_item, true, true);
         } else {
-            return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, group_count, first_bit_collection_with_ignored_groups, start_item, ref_mask, true, true);;
+            return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, get_group_count(array), first_bit_collection_with_ignored_groups, start_item, ref_mask, true, true);;
         }
     }
 
@@ -145,7 +152,7 @@ find_first_group_with_unset_bits :: (using array: *Bit_Array($COUNT), in_group_i
                 if bit_collection == 0xffff_ffff_ffff_ffff {
                     continue;
                 }
-                return_group_index_1_bit_groups(group_count, bit_collection, i, true, true);
+                return_group_index_1_bit_groups(get_group_count(array), bit_collection, i, true, true);
             }
         } else {
             for i: start_item+1..items.count-1 {
@@ -153,7 +160,7 @@ find_first_group_with_unset_bits :: (using array: *Bit_Array($COUNT), in_group_i
                 if (bit_collection & collection_mask) == collection_mask {
                     continue;
                 }
-                return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, group_count, bit_collection, i, ref_mask, true, true);
+                return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, get_group_count(array), bit_collection, i, ref_mask, true, true);
             }
         }
     }
@@ -168,7 +175,7 @@ find_last_group_with_unset_bits :: (using array: *Bit_Array($COUNT), in_group_in
         assert(ENFORCE_BITS_PER_GROUP == COUNT); 
     }
     if start_group == -1 {
-        start_group = group_count - 1;
+        start_group = get_group_count(array) - 1;
     }
     start_item := start_group >> GROUP_INDEXING_SHIFT;
     start_group_in_item := start_group - (start_item << GROUP_INDEXING_SHIFT);
@@ -186,9 +193,9 @@ find_last_group_with_unset_bits :: (using array: *Bit_Array($COUNT), in_group_in
     first_bit_collection_with_ignored_groups := items[start_item] | ignore_groups_mask;
     if (first_bit_collection_with_ignored_groups & collection_mask) != collection_mask {
         #if GROUPS_PER_U64 == 64 {
-            return_group_index_1_bit_groups(group_count, first_bit_collection_with_ignored_groups, start_item, false, true);
+            return_group_index_1_bit_groups(get_group_count(array), first_bit_collection_with_ignored_groups, start_item, false, true);
         } else {
-            return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, group_count, first_bit_collection_with_ignored_groups, start_item, ref_mask, false, true);;
+            return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, get_group_count(array), first_bit_collection_with_ignored_groups, start_item, ref_mask, false, true);;
         }
     }
 
@@ -200,7 +207,7 @@ find_last_group_with_unset_bits :: (using array: *Bit_Array($COUNT), in_group_in
                 if bit_collection == 0xffff_ffff_ffff_ffff {
                     continue;
                 }
-                return_group_index_1_bit_groups(group_count, bit_collection, i, false, true);
+                return_group_index_1_bit_groups(get_group_count(array), bit_collection, i, false, true);
             }
         } else {
             for #v2 < i: 0..start_item-1 {
@@ -208,7 +215,7 @@ find_last_group_with_unset_bits :: (using array: *Bit_Array($COUNT), in_group_in
                 if (bit_collection & collection_mask) == collection_mask {
                     continue;
                 }
-                return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, group_count, bit_collection, i, ref_mask, false, true);
+                return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, get_group_count(array), bit_collection, i, ref_mask, false, true);
             }
         }
     }
@@ -222,7 +229,7 @@ find_last_group_with_set_bits :: (using array: *Bit_Array($COUNT), in_group_inde
         assert(ENFORCE_BITS_PER_GROUP == COUNT); 
     }
     if start_group == -1 {
-        start_group = group_count - 1;
+        start_group = get_group_count(array) - 1;
     }
     start_item := start_group >> GROUP_INDEXING_SHIFT;
     start_group_in_item := start_group - (start_item << GROUP_INDEXING_SHIFT);
@@ -241,9 +248,9 @@ find_last_group_with_set_bits :: (using array: *Bit_Array($COUNT), in_group_inde
     first_bit_collection_with_ignored_groups := items[start_item] & ignore_groups_mask;
     if (first_bit_collection_with_ignored_groups & collection_mask) != 0 {
         #if GROUPS_PER_U64 == 64 {
-            return_group_index_1_bit_groups(group_count, first_bit_collection_with_ignored_groups, start_item, false, false);
+            return_group_index_1_bit_groups(get_group_count(array), first_bit_collection_with_ignored_groups, start_item, false, false);
         } else {
-            return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, group_count, first_bit_collection_with_ignored_groups, start_item, ref_mask, false, false);
+            return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, get_group_count(array), first_bit_collection_with_ignored_groups, start_item, ref_mask, false, false);
         }
     }
 
@@ -255,7 +262,7 @@ find_last_group_with_set_bits :: (using array: *Bit_Array($COUNT), in_group_inde
                 if bit_collection == 0 {
                     continue;
                 }
-                return_group_index_1_bit_groups(group_count, bit_collection, i, false, false);
+                return_group_index_1_bit_groups(get_group_count(array), bit_collection, i, false, false);
             }
         } else {
             for #v2 < i: 0..start_item-1 {
@@ -263,7 +270,7 @@ find_last_group_with_set_bits :: (using array: *Bit_Array($COUNT), in_group_inde
                 if (bit_collection & collection_mask) == 0 {
                     continue;
                 }
-                return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, group_count, bit_collection, i, ref_mask, false, false);
+                return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, get_group_count(array), bit_collection, i, ref_mask, false, false);
             }
         }
     }
@@ -293,9 +300,9 @@ find_first_group_with_set_bits :: (using array: *Bit_Array($COUNT), in_group_ind
     first_bit_collection_with_ignored_groups := items[start_item] & ignore_groups_mask;
     if (first_bit_collection_with_ignored_groups & collection_mask) != 0 {
         #if GROUPS_PER_U64 == 64 {
-            return_group_index_1_bit_groups(group_count, first_bit_collection_with_ignored_groups, start_item, true, false);
+            return_group_index_1_bit_groups(get_group_count(array), first_bit_collection_with_ignored_groups, start_item, true, false);
         } else {
-            return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, group_count, first_bit_collection_with_ignored_groups, start_item, ref_mask, true, false);
+            return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, get_group_count(array), first_bit_collection_with_ignored_groups, start_item, ref_mask, true, false);
         }
     }
 
@@ -307,7 +314,7 @@ find_first_group_with_set_bits :: (using array: *Bit_Array($COUNT), in_group_ind
                 if bit_collection == 0 {
                     continue;
                 }
-                return_group_index_1_bit_groups(group_count, bit_collection, i, true, false);
+                return_group_index_1_bit_groups(get_group_count(array), bit_collection, i, true, false);
             }
         } else {
             for i: start_item+1..items.count-1 {
@@ -315,7 +322,7 @@ find_first_group_with_set_bits :: (using array: *Bit_Array($COUNT), in_group_ind
                 if (bit_collection & collection_mask) == 0 {
                     continue;
                 }
-                return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, group_count, bit_collection, i, ref_mask, true, false);
+                return_group_index_n_bit_groups(GROUPS_PER_U64, GROUP_BIT_COUNT, get_group_count(array), bit_collection, i, ref_mask, true, false);
             }
         }
     }
@@ -349,7 +356,7 @@ make_search_masks :: inline (using array: *Bit_Array($COUNT), in_group_index: s6
     return ref_mask, collection_mask;
 }
 
-return_group_index_1_bit_groups :: (group_count: s64, bit_collection: u64, collection_index: s64, $SEARCH_FORWARD: bool, $FINDING_GAP: bool) -> s64 #expand {
+return_group_index_1_bit_groups :: (in_group_count: s64, bit_collection: u64, collection_index: s64, $SEARCH_FORWARD: bool, $FINDING_GAP: bool) -> s64 #expand {
     #if SEARCH_FORWARD {
         #if FINDING_GAP {
             bit_index := ifx bit_collection == 0 then 0 else (_bit_scan_forward(~bit_collection) - 1).(s64);
@@ -364,10 +371,10 @@ return_group_index_1_bit_groups :: (group_count: s64, bit_collection: u64, colle
         }
     }
     group_index := collection_index * 64 + bit_index;
-    `return ifx group_index >= group_count then -1 else group_index;
+    `return ifx group_index >= in_group_count then -1 else group_index;
 }
 
-return_group_index_n_bit_groups :: (groups_per_u64: s64, group_bit_count: s64, group_count: s64, bit_collection: u64, collection_index: s64, mask: u64, $SEARCH_FORWARD: bool, $FINDING_GAP: bool) -> s64 #expand {
+return_group_index_n_bit_groups :: (groups_per_u64: s64, group_bit_count: s64, in_group_count: s64, bit_collection: u64, collection_index: s64, mask: u64, $SEARCH_FORWARD: bool, $FINDING_GAP: bool) -> s64 #expand {
     #if SEARCH_FORWARD {
         for g: 0..groups_per_u64-1 {
             #if FINDING_GAP {
@@ -377,7 +384,7 @@ return_group_index_n_bit_groups :: (groups_per_u64: s64, group_bit_count: s64, g
             }
             if match {
                 group_index := collection_index * groups_per_u64 + g;
-                `return ifx group_index >= group_count then -1 else group_index;
+                `return ifx group_index >= in_group_count then -1 else group_index;
             }
             mask <<= group_bit_count;
         }
@@ -391,7 +398,7 @@ return_group_index_n_bit_groups :: (groups_per_u64: s64, group_bit_count: s64, g
             }
             if match {
                 group_index := collection_index * groups_per_u64 + g;
-                `return ifx group_index >= group_count then -1 else group_index;
+                `return ifx group_index >= in_group_count then -1 else group_index;
             }
         }
     }
