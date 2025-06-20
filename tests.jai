@@ -526,22 +526,114 @@ pool_test :: () -> bool, string {
 }
 
 nesting_allocator_test :: no_inline () -> bool, string {
-    a: Nesting_Allocator;
-    initialize_nesting_allocator(*a, context.default_allocator, 16385);
-    test_condition(a.chunk_lists.count == 1);
-    test_condition(a.chunk_lists[0].count == 17);
+    a: Nesting_Allocator_Collection;
+    nack_initialize(*a, context.default_allocator, 180, 16);
+    // a: Nesting_Allocator(16);
+    // initialize_nesting_allocator(*a, context.default_allocator, 64 * 1024, 180);
 
-    data_1 := nesting_allocator_allocate(*a, 129);
-    test_condition(data_1 == *a.chunk_lists[0][0]);
-    test_condition(a.books.flag_list_of_lists[0][0] == 0x1ff);
+    data_1 := nack_alloc(*a, 129);
+    test_condition(data_1.data == *a.small_allocator.chunk_lists[0][0].inner_chunks[0]);
+    test_condition(a.small_allocator.books.flag_list_of_lists[0][0] == 0x1ff);
 
-    data_2 := nesting_allocator_allocate(*a, 880);
-    test_condition(a.books.flag_list_of_lists[0][0] == U64_MAX);
+    data_2 := nack_alloc(*a, 880);
+    test_condition(a.small_allocator.books.flag_list_of_lists[0][0] == U64_MAX);
+
+    nack_free(*a, *data_1);
+    nack_free(*a, *data_2);
+
+    REF_COUNT :: 10000;
+    refs: [..]Nested_Allocation_Ref;
+    refs.allocator = temp;
+    array_resize(*refs, REF_COUNT);
+
+    total_alloc_seconds: float64;
+    total_alloc_seconds_last_100: float64;
+    max_time: float64;
+
+    for 0..REF_COUNT-1 {
+        bin_ct := random_get_within_range(0, 64).(s64);
+        alloc_sz := bin_ct * a.small_allocator.MIN_ALLOCATION_SIZE;
+        t1 := seconds_since_init();
+        refs[it] = nack_alloc(*a, alloc_sz);
+        t2 := seconds_since_init();
+        total_alloc_seconds += t2 - t1;
+        max_time = max(max_time, t2-t1);
+        if it >= (refs.count-1)-100 {
+            total_alloc_seconds_last_100 += t2 - t1;
+        }
+    }
+    for 0..REF_COUNT-1 {
+        index := ifx refs.count > 1 then round(random_get_within_range(0, (refs.count-1).(float))) else 0;
+        if index < 0 {
+            index = 0;
+        }
+        ref := refs[index];
+        array_ordered_remove_by_index(*refs, index);
+        nack_free(*a, *ref);
+    }
+
+    // not real world but whatever
+    total_alloc_ms := total_alloc_seconds * 1000.0;
+    ms_per_alloc := total_alloc_ms / REF_COUNT.(float64);
+    us_per_alloc := ms_per_alloc * 1000.0;
+
+    last_100_total_ms := total_alloc_seconds_last_100 * 1000.0;
+    last_100_ms_per_alloc := last_100_total_ms / 100.0;
+    last_100_us_per_alloc := last_100_ms_per_alloc * 1000.0;
+
+    log("avg alloc time:                        %us", us_per_alloc);
+    log("avg alloc time (last 100 allocations): %us", last_100_us_per_alloc);
+    log("max time:                              %us", max_time * 1000.0 * 1000.0);
+
+    total_alloc_seconds = 0;
+    total_alloc_seconds_last_100 = 0;
+    max_time = 0;
+    array_resize(*refs, REF_COUNT);
+
+    for 0..REF_COUNT-1 {
+        bin_ct: s64;
+        if random_get_zero_to_one() <= 0.2 {
+            bin_ct = random_get_within_range(32, 384).(s64);
+        } else {
+            bin_ct = random_get_within_range(1, 64).(s64);
+        }
+        alloc_sz := bin_ct * a.small_allocator.MIN_ALLOCATION_SIZE;
+        t1 := seconds_since_init();
+        refs[it] = nack_alloc(*a, alloc_sz);
+        t2 := seconds_since_init();
+        total_alloc_seconds += t2 - t1;
+        max_time = max(max_time, t2-t1);
+        if it >= (REF_COUNT-1)-100 {
+            total_alloc_seconds_last_100 += t2 - t1;
+        }
+    }
+    for 0..REF_COUNT-1 {
+        index := ifx refs.count > 1 then round(random_get_within_range(0, (refs.count-1).(float))) else 0;
+        if index < 0 {
+            index = 0;
+        }
+        ref := refs[index];
+        array_ordered_remove_by_index(*refs, index);
+        nack_free(*a, *ref);
+    }
+
+    // not real world but whatever
+    total_alloc_ms = total_alloc_seconds * 1000.0;
+    ms_per_alloc = total_alloc_ms / REF_COUNT.(float64);
+    us_per_alloc = ms_per_alloc * 1000.0;
+
+    last_100_total_ms = total_alloc_seconds_last_100 * 1000.0;
+    last_100_ms_per_alloc = last_100_total_ms / 100.0;
+    last_100_us_per_alloc = last_100_ms_per_alloc * 1000.0;
+
+    log("mixed allocations avg alloc time:                        %us", us_per_alloc);
+    log("mixed allocations avg alloc time (last 100 allocations): %us", last_100_us_per_alloc);
+    log("mixed allocations max time:                              %us", max_time * 1000.0 * 1000.0);
 
     return_test_success();
 }
 
-bump_allocator_test :: () -> bool, string {
+bump_allocator_test :: no_inline () -> bool, string {
     b: Bump_Allocator;
     bump_allocator_initialize(*b);
     defer bump_allocator_reset(*b);
@@ -657,93 +749,139 @@ Test_Struct :: struct {
     c: float64;
     d: string;
 }
+
 operator == :: (t1: Test_Struct, t2: Test_Struct) -> bool {
     return t1.a == t2.a && t1.b == t2.b && t1.c == t2.c && t1.d == t2.d;
 }
 
 serializer_test :: () -> bool, string {
+    checksum: [4]u32;
     {
-        s: Serializer(.STATIC, .BYTE);
-        s.memory = alloc_array(u8, 1024);
-        s.read_array_allocator = context.allocator;
-
-        
-        t: Test_Struct;
-        memset(*t, 0, size_of(Test_Struct));
-        t = Test_Struct.{
-            a = 100,
-            b = 255,
-            c = 0.1,
-            d = "hello"
-        };
-        str := "whatever";
-        array := u64.[1, 2, 3, 4, 5, 6];
-        array_for_copy : []u64 = array;
-
-        serialize(*s, *t.a);
-        head_1 := s.head;
-        serialize(*s, *t.b);
-        head_2 := s.head;
-        serialize(*s, *t.c);
-        head_3 := s.head;
-        serialize(*s, *t.d);
-        head_4 := s.head;
-        serialize(*s, *t);
-        head_5 := s.head;
-        serialize(*s, *str);
-        head_6 := s.head;
-        serialize(*s, *array_for_copy);
-        head_7 := s.head;
-        serialize(*s, *t);
-        head_8 := s.head;
-        serialize(*s, *t.a);
-        head_9 := s.head;
-        serialize(*s, *t.b);
-        head_10 := s.head;
-        serialize(*s, *t.c);
-        head_11 := s.head;
-        serialize(*s, *t.d);
-        head_12 := s.head;
-
-        s.rw_mode = .READ;
-        rt1, rt2, rt3, rt4: Test_Struct;
-        memset(*rt1, 0, size_of(Test_Struct));
-        rstr: string;
-        rarray: []u64;
-
-        test_condition(s.head == head_12);
-        serialize(*s, *rt1.d);
-        test_condition(s.head == head_11);
-        serialize(*s, *rt1.c);
-        test_condition(s.head == head_10);
-        serialize(*s, *rt1.b);
-        test_condition(s.head == head_9);
-        serialize(*s, *rt1.a);
-        test_condition(s.head == head_8);
-        serialize(*s, *rt2);
-        test_condition(s.head == head_7);
-        serialize(*s, *rarray);
-        test_condition(s.head == head_6);
-        serialize(*s, *rstr);
-        test_condition(s.head == head_5);
-        serialize(*s, *rt3);
-        test_condition(s.head == head_4);
-        serialize(*s, *rt4.d);
-        test_condition(s.head == head_3);
-        serialize(*s, *rt4.c);
-        test_condition(s.head == head_2);
-        serialize(*s, *rt4.b);
-        test_condition(s.head == head_1);
-        serialize(*s, *rt4.a);
-
-        test_condition(rt1 == t);
-        test_condition(rt2 == t);
-        test_condition(rt3 == t);
-        test_condition(rt4 == t);
-        test_condition(rstr == str);
-        test_condition(arrays_equal(rarray, array));
-        test_condition(s.head == 0);
-        test_condition(s.bit_head == 0);
+        ser: Serializer(.STATIC, .BYTE);
+        ser.memory = alloc_array(u8, 1024);
+        ser.read_array_allocator = context.allocator;
+        serializer_test_body(*checksum, true);
+    }
+    {
+        ser: Serializer(.STATIC, .PRIMITIVE);
+        ser.memory = alloc_array(u8, 1024);
+        ser.read_array_allocator = context.allocator;
+        serializer_test_body();
+    }
+    {
+        ser: Serializer(.STATIC, .PARAMETER);
+        ser.memory = alloc_array(u8, 1024);
+        ser.read_array_allocator = context.allocator;
+        ser.parameter_align = 1;
+        serializer_test_body();
+        ser.parameter_align = 2;
+        serializer_test_body();
+        ser.parameter_align = 4;
+        serializer_test_body();
+        ser.parameter_align = 8;
+        serializer_test_body();
+    }
+    {
+        ser: Serializer(.DYNAMIC, .BYTE);
+        ser.allocator = context.allocator;
+        ser.read_array_allocator = context.allocator;
+        serializer_test_body(*checksum);
     }
     return_test_success();
+}
+
+#scope_file // ------------------------------------------------------------------------------------------------ { FILE }
+
+serializer_test_body :: (checksum: *[4]u32 = null, load_checksum := false) #expand {
+    s := `ser;
+    if checksum {
+        s.pad_for_checksum = true;
+    }
+    reset(*s);
+
+    t: Test_Struct;
+    memset(*t, 0, size_of(Test_Struct));
+    t = Test_Struct.{
+        a = 100,
+        b = 255,
+        c = 0.1,
+        d = "hello"
+    };
+    str := "whatever";
+    array := u16.[1, 2, 3, 4, 5, 6, 7];
+    array_for_copy : []u16 = array;
+
+    serialize(*s, *t.a);
+    head_1 := s.head;
+    serialize(*s, *t.b);
+    head_2 := s.head;
+    serialize(*s, *t.c);
+    head_3 := s.head;
+    serialize(*s, *t.d);
+    head_4 := s.head;
+    serialize(*s, *t);
+    head_5 := s.head;
+    serialize(*s, *str);
+    head_6 := s.head;
+    serialize(*s, *array_for_copy);
+    head_7 := s.head;
+    serialize(*s, *t);
+    head_8 := s.head;
+    serialize(*s, *t.a);
+    head_9 := s.head;
+    serialize(*s, *t.b);
+    head_10 := s.head;
+    serialize(*s, *t.c);
+    head_11 := s.head;
+    serialize(*s, *t.d);
+    head_12 := s.head;
+
+    if checksum {
+        if load_checksum {
+            imprint_checksum(*s);
+            memcpy(checksum.data, s.memory.data, size_of([4]u32));
+        } else {
+            memcpy(s.memory.data, checksum.data, size_of([4]u32));
+            test_condition(validate_checksum(*s));
+        }
+    }
+
+    rt1, rt2, rt3, rt4: Test_Struct;
+    memset(*rt1, 0, size_of(Test_Struct));
+    rstr: string;
+    rarray: []u16;
+
+    set_rw_mode(*s, .READ);
+
+    serialize(*s, *rt1.a);
+    test_condition(head_1 == s.head);
+    serialize(*s, *rt1.b);
+    test_condition(head_2 == s.head);
+    serialize(*s, *rt1.c);
+    test_condition(head_3 == s.head);
+    serialize(*s, *rt1.d);
+    test_condition(head_4 == s.head);
+    serialize(*s, *rt2);
+    test_condition(head_5 == s.head);
+    serialize(*s, *rstr);
+    test_condition(head_6 == s.head);
+    serialize(*s, *rarray);
+    test_condition(head_7 == s.head);
+    serialize(*s, *rt3);
+    test_condition(head_8 == s.head);
+    serialize(*s, *rt4.a);
+    test_condition(head_9 == s.head);
+    serialize(*s, *rt4.b);
+    test_condition(head_10 == s.head);
+    serialize(*s, *rt4.c);
+    test_condition(head_11 == s.head);
+    serialize(*s, *rt4.d);
+    test_condition(head_12 == s.head);
+
+    test_condition(rt1 == t);
+    test_condition(rt2 == t);
+    test_condition(rt3 == t);
+    test_condition(rt4 == t);
+    test_condition(rstr == str);
+    test_condition(arrays_equal(rarray, array));
 }

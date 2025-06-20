@@ -1,47 +1,18 @@
-
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// for writing forward into a buffer and reading backward.
 
-Binary_Reader :: struct {
-    memory: string;
-    position: s64;
+// note: don't need bit serialization. can just use separate bit flags for that. no reason to inline the bits I can think of.
+// note: don't need a struct for combining the data with a checksum. should just have the serializer leave the first
+// 128 bits open for the checksum if it's going to have one.
+// todo: if alignment isn't PRIMITIVE, structs need to be packed/unpacked
+
+SERIALIZER_CHECKSUM_TYPE :: [4]u32;
+SERIALIZER_CHECKSUM_SIZE :: size_of(SERIALIZER_CHECKSUM_TYPE);
+
+Rw_Mode :: enum u8 {
+    WRITE;
+    READ;
 }
-
-read_number :: (reader: *Binary_Reader, $Number_Type: Type, endianness := Endianness.LITTLE) -> Number_Type {
-    val := read_number_from_binary(reader.memory, reader.position, Number_Type, endianness);
-    reader.position += size_of(Number_Type);
-    return val;
-}
-
-read_string :: (using reader: *Binary_Reader, count: s64) -> string {
-    assert(position + count <= memory.count);
-    val := string.{count, memory.data + position};
-    position += count;
-    return val;
-}
-
-read_array :: (using reader: *Binary_Reader, $Number_Type: Type, count: s64, e := Endianness.LITTLE, allocator := context.allocator) -> []Number_Type {
-    old_position := position;
-    advance_count := count * size_of(Number_Type);
-    assert(position + advance_count <= memory.count);
-    out_array := alloc_array(Number_Type, allocator);
-    for *out_array {
-        it.* = read_number(reader, Number_Type, e);
-    }
-    assert(position == old_position + advance_count);
-    return out_array;
-}
-
-read_bytes :: (using reader: *Binary_Reader, buffer: *[]u8, count: s64) {
-    old_position := position;
-    assert(position + count <= memory.count);
-    assert(count <= buffer.count);
-    memcpy(buffer.data, memory.data + position, count);
-    reader.position += count;
-}
-
-// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// note don't need bit serialization. can just use separate bit flags for that. no reason to inline the bits I can think of.
 
 Serializer :: struct($in_alloc_mode: Serializer_Alloc_Mode = .STATIC, $in_align_mode: Serializer_Align_Mode = .BYTE) {
     memory: []u8;
@@ -51,14 +22,12 @@ Serializer :: struct($in_alloc_mode: Serializer_Alloc_Mode = .STATIC, $in_align_
     //     dbg_i: s64;
     // }
     allocator: Allocator; // only used if dynamic
-    read_array_allocator: Allocator; // used only when reading out arrays
-    head: s64;
-    bit_head: u8;
+    // used only when reading out arrays. if not set, will default to using the above allocator.
+    read_array_allocator: Allocator; 
+    head: s32;
     parameter_align : u8 = 1; // must be power of 2 if used
-    rw_mode: enum u8 {
-        WRITE;
-        READ;
-    };
+    rw_mode: Rw_Mode;
+    pad_for_checksum := false;
     alloc_mode :: in_alloc_mode;
     align_mode :: in_align_mode;
 }
@@ -66,7 +35,7 @@ Serializer :: struct($in_alloc_mode: Serializer_Alloc_Mode = .STATIC, $in_align_
 Serializer_Alloc_Mode :: enum u8 {
     STATIC;
     DYNAMIC;
-};
+}
 
 Serializer_Align_Mode :: enum u8 {
     BYTE;
@@ -74,11 +43,12 @@ Serializer_Align_Mode :: enum u8 {
     PARAMETER;
 }
 
-serialize :: (buffer: *Serializer($alloc_m, $align_m), item: *$T) {
-    if buffer.rw_mode == .WRITE {
-        write(buffer, item);
+set_rw_mode :: (using buffer: *Serializer($alloc_m, $align_m), m: Rw_Mode) {
+    rw_mode = m;
+    if pad_for_checksum {
+        head = SERIALIZER_CHECKSUM_SIZE;
     } else {
-        read(buffer, item);
+        head = 0;
     }
 }
 
@@ -88,189 +58,221 @@ reset :: (using buffer: *Serializer($alloc_m, $align_m), keep_allocation := true
         memory.data = null;
         memory.count  = 0;
     }
-    // allocator = .{} keep allocator
-    head = 0;
-    bit_head = 0;
-    // parameter_align = 1 keep constant align setting
-    rw_mode = .WRITE;
+    set_rw_mode(buffer, .WRITE);
 }
 
-write :: (using buffer: *Serializer($alloc_m, $align_m), item: *$T) 
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// convenience proc constants
+
+write               :: #bake_arguments serialize_primitive(mode=.WRITE);
+read                :: #bake_arguments serialize_primitive(mode=.READ);
+write_array         :: #bake_arguments serialize_array(mode=.WRITE);
+read_array          :: #bake_arguments serialize_array(mode=.READ);
+write_array_data    :: #bake_arguments serialize_array_data(mode=.WRITE);
+read_array_data     :: #bake_arguments serialize_array_data(mode=.READ);
+write_string        :: #bake_arguments serialize_string(mode=.WRITE);
+read_string         :: #bake_arguments serialize_string(mode=.READ);
+write_bytes         :: #bake_arguments serialize_bytes(mode=.WRITE);
+read_bytes          :: #bake_arguments serialize_bytes(mode=.READ);
+
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// primitives
+
+serialize :: (using buffer: *Serializer($alloc_m, $align_m), item: *$T) 
 #modify {
     return is_serial_primitive(T);
 } {
+    if rw_mode == .WRITE {
+        serialize_primitive(buffer, item, .WRITE);
+    } else {
+        serialize_primitive(buffer, item, .READ);
+    }
+}
+
+serialize_primitive :: (using buffer: *Serializer($alloc_m, $align_m), item: *$T, $mode: Rw_Mode) 
+#modify {
+    return is_serial_primitive(T);
+} {
+    validate_read_write();
     align_head_up_for_type(buffer, T);
     new_head := head + size_of(T);
-    serializer_check_new_head(buffer, new_head);
-    serializer_write_primitive(buffer, item);
+    check_new_head(buffer, new_head);
+    
+    #if mode == .WRITE {
+        write_primitive(buffer, item);
+    } else {
+        read_primitive(buffer, item);
+    }
+
     head = new_head;
 }
 
-write :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T) 
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// arrays
+
+serialize :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T) 
 #modify {
     return is_serial_primitive(T);
 } {
-    write_array_data(buffer, array);
-    array_count: u32 = xx array.count;
-    assert(array.count < (1 << 28));
-
-    pre_write_num_head := head;
-    write(buffer, *array_count);
-
-    count_in_buffer : *u32 = (*buffer.memory[head-4]).(*u32);
-    head_diff := (head - pre_write_num_head);
-    assert(head_diff >= 0);
-    head_diff -= 4;
-    count_in_buffer.* |= head_diff.(u32) << 28;
+    if rw_mode == .WRITE {
+        serialize_array(buffer, array, .WRITE);
+    } else {
+        serialize_array(buffer, array, .READ);
+    }
 }
 
-write :: (using buffer: *Serializer($alloc_m, $align_m), str: *string) {
-    array := as_array(str.*, u8);
-    write(buffer, *array);
-}
-
-
-read :: (using buffer: *Serializer($alloc_m, $align_m), item: *$T) 
+serialize :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T, array_count: s32) 
 #modify {
     return is_serial_primitive(T);
 } {
-    #if buffer.align_mode != .BYTE {
-        rm_error("Serializer can only read in BYTE mode");
-        return;
+    if rw_mode == .WRITE {
+        serialize_array_data(buffer, array, array_count, .WRITE);
+    } else {
+        serialize_array_data(buffer, array, array_count, .READ);
     }
-    head -= size_of(T);
-    align_head_down_for_type(buffer, T);
-    serializer_read_primitive(buffer, item);
 }
 
-read :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T) 
+serialize_array :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T, $mode: Rw_Mode)
 #modify {
     return is_serial_primitive(T);
 } {
-    #if buffer.align_mode != .BYTE {
-        rm_error("Serializer can only read in BYTE mode");
+    array_count: s32 = xx array.count;
+    serialize_primitive(buffer, *array_count, mode);
+    serialize_array_data(buffer, array, array_count, mode);
+}
+
+serialize_array_data :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T, array_count: s32, $mode: Rw_Mode)
+#modify {
+    return is_serial_primitive(T);
+} {
+    validate_read_write();
+    if array_count == 0 {
         return;
     }
-    assert(array.data == null && array.count == 0);
-    array_count: u32;
-    read(buffer, *array_count);
-    // we may need to move the head back. if so, the number of moves is in the top bits of array_count
-    retract_count := (array_count & 0xf000_0000) >> 28;
-    array_count &= ~(0xf000_0000).(u32);
-    if retract_count > 0 {
-        retract_head(buffer, retract_count);
+    align_head_up_for_type(buffer, T);
+    array_size := size_of(T) * array_count;
+    new_head := head + array_size;
+    check_new_head(buffer, new_head);
+    #if mode == .WRITE {
+        memcpy(memory.data + head, array.data, array_size);
+    } else {
+        if array.data == null {
+            use_allocator := ifx read_array_allocator.proc != null then read_array_allocator else allocator;
+            array.* = alloc_array(T, array_count, use_allocator);
+        } else {
+            assert(array.count >= array_count);
+        }
+        memcpy(array.data, memory.data + head, array_size);
     }
-    if array_count > 0 {
-        array.* = alloc_array(T, array_count, read_array_allocator);
-        read_into_array(buffer, array);
+    head = new_head;
+}
+
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// strings
+
+serialize :: (using buffer: *Serializer($alloc_m, $align_m), str: *string) {
+    if rw_mode == .WRITE {
+        serialize_string(buffer, str, .WRITE);
+    } else {
+        serialize_string(buffer, str, .READ);
     }
 }
 
-read_into_array :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T) {
-    array_size := array.count * size_of(T);
-    head -= array_size;
-    align_head_down_for_type(buffer, T);
-    memcpy(array.data, memory.data + head, array_size);
-}
-
-read :: (using buffer: *Serializer($alloc_m, $align_m), str: *string) {
-    #if buffer.align_mode != .BYTE {
-        rm_error("Serializer can only read in BYTE mode");
-        return;
-    }
+serialize_string :: (using buffer: *Serializer($alloc_m, $align_m), str: *string, $mode: Rw_Mode) {
+    assert(rw_mode == mode);
     array: []u8;
-    read(buffer, *array);
-    str.data = array.data;
-    str.count = array.count;
-}
-
-write_array_data :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T) 
-#modify {
-    return is_serial_primitive(T);
-} {
-    if array.count != 0 {
-        align_head_up_for_type(buffer, T);
-        array_size := size_of(T) * array.count;
-        new_head := head + array_size;
-        serializer_check_new_head(buffer, new_head);
-        memcpy(memory.data + head, array.data, array.count * size_of(T));
-        head = new_head;
-    }   
-}
-
-read_array_data :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T) 
-#modify {
-    return is_serial_primitive(T);
-} {
-    #if buffer.align_mode != .BYTE {
-        rm_error("Serializer can only read in BYTE mode");
-        return;
-    }
-    if array.count != 0 {
-        read_into_array(buffer, array);
+    #if mode == .WRITE {
+        array.data = str.data;
+        array.count = str.count;
+        serialize_array(buffer, *array, .WRITE);
+    } else {
+        serialize_array(buffer, *array, .READ);
+        str.data = array.data;
+        str.count = array.count;
     }
 }
 
-write_array_count_and_pointer :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T) 
-#modify {
-    return is_serial_primitive(T);
-} {
-    count : s64 = array.count;
-    data : s64 = xx array.data;
-    write(buffer, *count);
-    write(buffer, *data);
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// bytes
+
+serialize :: (using buffer: *Serializer($alloc_m, $align_m), data: *u8, count: s32) {
+    if rw_mode == .WRITE {
+        serialize_bytes(buffer, data, .WRITE);
+    } else {
+        serialize_bytes(buffer, data, .READ);
+    }
 }
 
-read_array_count_and_pointer :: (using buffer: *Serializer($alloc_m, $align_m), array: *[]$T) 
-#modify {
-    return is_serial_primitive(T);
-} {
-    #if buffer.align_mode != .BYTE {
-        rm_error("Serializer can only read in BYTE mode");
-        return;
-    }
-    assert(array.data == null && array.count == 0);
-    count, data: s64;
-    read(buffer, *data);
-    read(buffer, *count);
+serialize_bytes :: (using buffer: *Serializer($alloc_m, $align_m), data: *u8, count: s32, $mode: Rw_Mode) {
+    array: []u8 = ---;
+    array.count = xx count;
     array.data = data;
-    array.count = count;
+    serialize_array_data(buffer, *array, count, mode);
 }
 
-#scope_file // ------------------------------------------------------------------------------------------------ { FILE }
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-advance_head :: inline (using buffer: *Serializer($alloc_m, $align_m), by_count: s64) {
-    new_head := head + by_count;
-    assert(by_count > 0);
-    assert(head >= 0 && head <= memory.count);
-    assert(new_head >= 0 && new_head <= memory.count);
-    head = new_head;
+validate_checksum ::(using buffer: *Serializer($alloc_m, $align_m)) -> bool {
+    assert(pad_for_checksum);
+    assert(memory.count > SERIALIZER_CHECKSUM_SIZE);
+    calculated: [4]u32;
+    calculate_checksum(buffer, *calculated);
+    have : *[4]u32 = xx memory.data;
+    for 0..3 {
+        if have.*[it] != calculated[it] then return false;
+    }
+    return true;
 }
 
-retract_head :: inline (using buffer: *Serializer($alloc_m, $align_m), by_count: s64) {
-    new_head := head - by_count;
-    assert(by_count > 0);
-    assert(head >= 0 && head <= memory.count);
-    assert(new_head >= 0 && new_head <= memory.count);
-    head = new_head;
+imprint_checksum :: (using buffer: *Serializer($alloc_m, $align_m)) {
+    assert(pad_for_checksum);
+    assert(memory.count > SERIALIZER_CHECKSUM_SIZE);
+    calculate_checksum(buffer, xx memory.data);
+}
+
+calculate_checksum :: (using buffer: *Serializer($alloc_m, $align_m), out: *[4]u32) {
+    assert(pad_for_checksum);
+    assert(memory.count > SERIALIZER_CHECKSUM_SIZE);
+    assert(head > SERIALIZER_CHECKSUM_SIZE);
+    bufstr := string.{head - SERIALIZER_CHECKSUM_SIZE, memory.data + SERIALIZER_CHECKSUM_SIZE};
+    scope_set_allocator(temp);
+    str := md5(bufstr);
+    array := as_array(str, u32);
+    memcpy(out.data, array.data, size_of(u32) * 4);
 }
 
 align_head_up :: (using buffer: *Serializer($alloc_m, $align_m), align: u8) {
-    bit_head = 0;
-    new_head := pow2_align_ceil(head, align);
+    new_head := ceil_to_pow2_multiple(head, align);
     diff := new_head - head;
     if diff > 0 {
         advance_head(buffer, diff);
     } else assert(diff == 0);
 }
 
-align_head_down :: (using buffer: *Serializer($alloc_m, $align_m), align: u8) { 
-    bit_head = 0;
-    new_head := pow2_align_floor(head, align);
-    diff := head - new_head;
-    if diff > 0 {
-        retract_head(buffer, diff);
-    } else assert(diff == 0);
+check_new_head :: (using buffer: *Serializer($alloc_m, $align_m), new_head: s32) {
+    assert(new_head >= 0);
+    #if alloc_mode == .STATIC {
+        assert(new_head <= memory.count);
+    } else { // DYNAMIC
+        desired_capacity := max(ceil_to_pow2_multiple(new_head, 2), 256);
+        if memory.count < desired_capacity {
+            scope_set_allocator(allocator);
+            new_memory := alloc_array(u8, desired_capacity);
+            memcpy(new_memory.data, memory.data, memory.count);
+            free(memory.data);
+            memory = new_memory;
+        }
+    }
+}
+
+#scope_file // ------------------------------------------------------------------------------------------------ { FILE }
+
+advance_head :: inline (using buffer: *Serializer($alloc_m, $align_m), by_count: s32) {
+    new_head := head + by_count;
+    assert(by_count > 0);
+    assert(head >= 0 && head <= memory.count);
+    assert(new_head >= 0 && new_head <= memory.count);
+    head = new_head;
 }
 
 align_head_up_for_type :: (using buffer: *Serializer($alloc_m, $align_m), $T: Type) {
@@ -283,40 +285,12 @@ align_head_up_for_array :: (using buffer: *Serializer($alloc_m, $align_m), $T: T
         align_head_up(buffer, 4);
     case .PARAMETER;
         align_head_up(buffer, parameter_align);
+    case .BYTE;
     }
 }
 
-align_head_down_for_type :: (using buffer: *Serializer($alloc_m, $align_m), $T: Type) {
-    align_head_down(buffer, serial_primitive_alignment(buffer, T));
-}
-
-align_head_down_for_array :: (using buffer: *Serializer($alloc_m, $align_m), $T: Type) {
+write_primitive :: inline (using buffer: *Serializer($alloc_m, $align_m), primitive: *$T) {
     #if #complete align_mode == {
-    case .PRIMITIVE;
-        align_head_down(buffer, 4);
-    case .PARAMETER;
-        align_head_down(buffer, parameter_align);
-    }
-}
-
-serializer_check_new_head :: (using buffer: *Serializer($alloc_m, $align_m), new_head: s64) {
-    assert(new_head >= 0);
-    #if alloc_mode == .STATIC {
-        assert(new_head <= memory.count);
-    } else { // DYNAMIC
-        desired_capacity := max(pow2_align_ceil(new_head, 2), 512);
-        if memory.count < desired_capacity {
-            scope_set_allocator(allocator);
-            new_memory := alloc_array(u8, desired_capacity);
-            memcpy(new_memory.data, memory.data, memory.count);
-            free(memory.data);
-            memory = new_memory;
-        }
-    }
-}
-
-serializer_write_primitive :: inline (using buffer: *Serializer($alloc_m, $align_m), primitive: *$T) {
-    #if align_mode == {
     case .PRIMITIVE;
         (memory.data + head).(*T).* = primitive.*;
     case .PARAMETER;
@@ -326,8 +300,8 @@ serializer_write_primitive :: inline (using buffer: *Serializer($alloc_m, $align
     }
 }
 
-serializer_read_primitive :: inline (using buffer: *Serializer($alloc_m, $align_m), primitive: *$T) {
-    #if align_mode == {
+read_primitive :: inline (using buffer: *Serializer($alloc_m, $align_m), primitive: *$T) {
+    #if #complete align_mode == {
     case .PRIMITIVE;
          primitive.* = (memory.data + head).(*T).*;
     case .PARAMETER;
@@ -357,6 +331,16 @@ is_serial_primitive :: (T: Type) -> bool {
     if info.type == .BOOL    return true;
     if info.type == .ENUM    return true;
     if info.type == .STRUCT  return true;
-    if info.type == .POINTER return true;
     return false;
 }
+
+validate_read_write :: () #expand {
+    assert(`rw_mode == `mode);
+    if `pad_for_checksum {
+        assert(`head >= SERIALIZER_CHECKSUM_SIZE);
+    }
+}
+
+#scope_file // ------------------------------------------------------------------------------------------------ { FILE }
+
+#import "md5";

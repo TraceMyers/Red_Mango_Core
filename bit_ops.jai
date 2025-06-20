@@ -7,7 +7,7 @@
 //                ^
 // sequence can be found here, at lsb index 4
 // index = 0 if the pattern exists when it begins at the least significant bit
-find_index_of_missing_bit_sequence_lsb :: (bits: $T, sequence: u64, sequence_bit_count: s64) -> s8 {
+find_index_of_missing_bit_sequence_lsb :: inline (bits: $T, sequence: u64, sequence_bit_count: s64) -> s8 {
     TYPE_BIT_COUNT :: (size_of(T) * 8);
     assert(sequence_bit_count > 0 && sequence_bit_count <= TYPE_BIT_COUNT);
     shift_range := TYPE_BIT_COUNT - sequence_bit_count;
@@ -20,7 +20,7 @@ find_index_of_missing_bit_sequence_lsb :: (bits: $T, sequence: u64, sequence_bit
     return -1;
 }
 
-largest_gap_in_bit_sequence_lsb :: (bits: $T) -> size: s8 {
+largest_gap_in_bit_sequence_lsb :: inline (bits: $T) -> size: s8 {
     TYPE_BIT_COUNT :: (size_of(T) * 8);
     gap_size: s8;
     largest_gap_size: s8;

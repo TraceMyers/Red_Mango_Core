@@ -17,6 +17,6 @@ scope_set_working_directory :: (dir: string) #expand {
 }
 
 scope_mark_and_recede_allocations :: (using bump: *Bump_Allocator) #expand {
-    mark := bump_allocator_get_high_water_mark(bump);
-    `defer bump_allocator_reset_to_high_water_mark(bump, mark);
+    mark := get_high_water_mark(bump);
+    `defer reset_to_high_water_mark(bump, mark);
 }

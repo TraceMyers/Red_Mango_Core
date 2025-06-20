@@ -14,7 +14,8 @@ run_tests :: (header: string, tests: []Test_Proc) {
     passed_test_ct := 0;
     log("\nrunning tests: %", header);
     for tests {
-        auto_release_temp();
+        // in release, causes crash on log, i think due to optimizations around temp allocations
+        // auto_release_temp();
         passed_test, log_str := it();
         passed_test_ct += cast(s64)passed_test;
         log(log_str);

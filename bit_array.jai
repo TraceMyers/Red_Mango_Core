@@ -334,6 +334,31 @@ group_to_bit_index :: inline (using array: *Bit_Array($COUNT), group: s64, in_gr
     return group * GROUP_BIT_COUNT + in_group_index;
 }
 
+// needed to bring this in from Bit_Operations module, and make it *not* a macro, otherwise crash when using at compile time. not clear why.
+_bit_scan_forward :: inline (input: $T) -> s32 {  // One plus the index of the first bit, when searching from LSB to MSB. A result of 0 means the input was 0.
+    BITS :: size_of(T)*8;
+    #if CPU == .X64 {
+        #if BITS == 8 {  // There's no bsf for 8 bits. Sad.
+            result: s16 = -1;
+            #asm {
+                movzxbw   temp:, input;
+                bsf.16    result, temp;
+            }
+        } else {
+            result: T = xx,no_check -1;
+            #asm {
+                bsf?T     result, input;
+            }
+        }
+        return (result + 1).(s32,trunc);
+    } else {
+        // @Speed: Slow fallback for other CPUs.
+        for i: 0..BITS-1 {
+            if input & cast,no_check(T) (1 << i) return (i + 1).(s32);
+        }
+        return 0;
+    }
+}
 
 #scope_file // ------------------------------------------------------------------------------------------------ { FILE }
 
@@ -405,31 +430,6 @@ return_group_index_n_bit_groups :: (groups_per_u64: s64, group_bit_count: s64, i
     assert(false, tprint("failed to find a group with an unset bit even though the reference mask indicated it should exist. bit collection: 0x%, ref mask: %, u64 mask: %", _fib16(bit_collection,16), _fib16(`ref_mask,16), _fib16(`collection_mask,16)));
 }
 
-// needed to bring this in from Bit_Operations module, and make it *not* a macro, otherwise crash when using at compile time. not clear why.
-_bit_scan_forward :: inline (input: $T) -> s32 {  // One plus the index of the first bit, when searching from LSB to MSB. A result of 0 means the input was 0.
-    BITS :: size_of(T)*8;
-    #if CPU == .X64 {
-        #if BITS == 8 {  // There's no bsf for 8 bits. Sad.
-            result: s16 = -1;
-            #asm {
-                movzxbw   temp:, input;
-                bsf.16    result, temp;
-            }
-        } else {
-            result: T = xx,no_check -1;
-            #asm {
-                bsf?T     result, input;
-            }
-        }
-        return (result + 1).(s32,trunc);
-    } else {
-        // @Speed: Slow fallback for other CPUs.
-        for i: 0..BITS-1 {
-            if input & cast,no_check(T) (1 << i) return (i + 1).(s32);
-        }
-        return 0;
-    }
-}
 
 // tbh I just copied this because I had to copy the other one and I only need the two from the module.
 _bit_scan_reverse :: inline (input: $T) -> s32 #expand {  // One plus the index of the first bit, when searching from MSB to LSB. A result of 0 means the input was 0.

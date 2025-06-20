@@ -24,19 +24,19 @@ max_value :: inline (number: $Number_Type) -> Number_Type #expand {
 
 // ceil to a multiple of a power of 2
 // todo: rename to something better
-pow2_align_ceil :: inline (n: $T, power_of_two_size: s64) -> T {
+ceil_to_pow2_multiple :: inline (n: $T, power_of_two_size: T) -> T {
     assert(is_power_of_two(power_of_two_size));
     return (n + power_of_two_size-1) & ~(power_of_two_size-1);
 }
 
 // floor to a multiple of a power of 2
 // todo: rename to something better
-pow2_align_floor :: inline (n: $T, power_of_two_size: s64) -> T {
+floor_to_pow2_multiple :: inline (n: $T, power_of_two_size: T) -> T {
     assert(is_power_of_two(power_of_two_size));
     return n & ~(power_of_two_size-1);
 }
 
-ceil_to_power_of_two :: inline (n: $T) -> T {
+ceil_to_pow2 :: inline (n: $T) -> T {
     if n == 0 {
         return 0;
     } else if !is_power_of_two(n) {

@@ -23,7 +23,7 @@ bump_allocator_initialize :: (using bump: *Bump_Allocator, heaps_tracking_array_
     assert(in_default_heap_size > 0);
     assert(heaps.count == 0);
     assert(heap_index == 0);
-    in_default_heap_size = ceil_to_multiple(in_default_heap_size, 8);
+    in_default_heap_size = ceil_to_pow2_multiple(in_default_heap_size, 8);
     proc = bump_allocator_proc;
     data = bump;
     array_resize(*heaps, heaps_tracking_array_ct);
@@ -69,7 +69,7 @@ bump_allocator_allocate :: (using bump: *Bump_Allocator, size: s64) -> *void {
     memset(data_out, 0, size);
     // align everything to 8 because it's easy and works fine I think
     cur_heap.end += xx size;
-    cur_heap.end = ceil_to_multiple(cur_heap.end, 8);
+    cur_heap.end = ceil_to_pow2_multiple(cur_heap.end, 8);
 
     return data_out;
 }
@@ -101,11 +101,11 @@ bump_allocator_reset :: (using bump: *Bump_Allocator, keep_memory := true) {
     }
 }
 
-bump_allocator_get_high_water_mark :: (using bump: *Bump_Allocator) -> Bump_Allocator_High_Water_Mark {
+get_high_water_mark :: (using bump: *Bump_Allocator) -> Bump_Allocator_High_Water_Mark {
     return .{heap_index, heaps[heap_index].end};
 }
 
-bump_allocator_reset_to_high_water_mark :: (using bump: *Bump_Allocator, mark: Bump_Allocator_High_Water_Mark) {
+reset_to_high_water_mark :: (using bump: *Bump_Allocator, mark: Bump_Allocator_High_Water_Mark) {
     assert(mark.heap_index < heaps.count);
     assert(mark.heap_index <= heap_index, "mark index: %, heap index: %", mark.heap_index, heap_index);
     assert(heaps[mark.heap_index].bytes.count >= mark.heap_end);
