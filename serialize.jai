@@ -15,7 +15,7 @@ Rw_Mode :: enum u8 {
 }
 
 Serializer :: struct($in_alloc_mode: Serializer_Alloc_Mode = .STATIC, $in_align_mode: Serializer_Align_Mode = .BYTE) {
-    memory: []u8;
+    memory: string;
     // TODO: parallel array of tags. push on write, pop on read. check against T.
     // #if SERIALIZE_DEBUG {
         // dbg_tags: [..]Type_Info_Tag;
@@ -54,15 +54,13 @@ set_rw_mode :: (using buffer: *Serializer($alloc_m, $align_m), m: Rw_Mode) {
 
 reset :: (using buffer: *Serializer($alloc_m, $align_m), keep_allocation := true) {
     if !keep_allocation {
-        array_free(memory);
-        memory.data = null;
-        memory.count  = 0;
+        reset(*memory);
     }
     set_rw_mode(buffer, .WRITE);
 }
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// convenience proc constants
+// convenience procs
 
 write               :: #bake_arguments serialize_primitive(mode=.WRITE);
 read                :: #bake_arguments serialize_primitive(mode=.READ);
@@ -74,6 +72,15 @@ write_string        :: #bake_arguments serialize_string(mode=.WRITE);
 read_string         :: #bake_arguments serialize_string(mode=.READ);
 write_bytes         :: #bake_arguments serialize_bytes(mode=.WRITE);
 read_bytes          :: #bake_arguments serialize_bytes(mode=.READ);
+
+read_out :: inline (using buffer: *Serializer($alloc_m, $align_m), $T: Type) -> T 
+#modify {
+    return is_serial_primitive(T);
+} {
+    item: T = ---;
+    read(buffer, *item);
+    return item;
+}
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // primitives
@@ -235,10 +242,13 @@ calculate_checksum :: (using buffer: *Serializer($alloc_m, $align_m), out: *[4]u
     assert(memory.count > SERIALIZER_CHECKSUM_SIZE);
     assert(head > SERIALIZER_CHECKSUM_SIZE);
     bufstr := string.{head - SERIALIZER_CHECKSUM_SIZE, memory.data + SERIALIZER_CHECKSUM_SIZE};
-    scope_set_allocator(temp);
-    str := md5(bufstr);
-    array := as_array(str, u32);
-    memcpy(out.data, array.data, size_of(u32) * 4);
+    {
+        scope_set_allocator(temp);
+        auto_release_temp();
+        str := md5(bufstr);
+        array := as_array(str, u32);
+        memcpy(out.data, array.data, size_of(u32) * 4);
+    }
 }
 
 align_head_up :: (using buffer: *Serializer($alloc_m, $align_m), align: u8) {
@@ -257,7 +267,7 @@ check_new_head :: (using buffer: *Serializer($alloc_m, $align_m), new_head: s32)
         desired_capacity := max(ceil_to_pow2_multiple(new_head, 2), 256);
         if memory.count < desired_capacity {
             scope_set_allocator(allocator);
-            new_memory := alloc_array(u8, desired_capacity);
+            new_memory := alloc_string(desired_capacity);
             memcpy(new_memory.data, memory.data, memory.count);
             free(memory.data);
             memory = new_memory;

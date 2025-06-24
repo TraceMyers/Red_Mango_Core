@@ -34,7 +34,7 @@ bound_string_reset :: inline (bound: *Bound_String, keep_data_reference := true)
     bound.str.count = 0;
 }
 
-reset_string :: inline (s: *string) {
+reset :: inline (s: *string) {
     if s.data != null {
         free(s.data);
         s.data = null;
@@ -242,3 +242,21 @@ tokenize_and_trim :: (s: string, separator: u8) -> []string {
     }
     return strings;
 }
+
+// tokenize_and_trim :: (s: string, separator: string) -> []string {
+//     strings := split(s, separator);
+//     for *strings {
+//         it.* = trim(it.*);
+//     }
+//     for #v2 < 0..strings.count-1 {
+//         if strings[it].count == 0 {
+//             if it < strings.count - 1 {
+//                 for i : it..strings.count-2 {
+//                     strings[i] = strings[i+1];
+//                 }
+//             }
+//             strings.count -= 1;
+//         }
+//     }
+//     return strings;
+// }

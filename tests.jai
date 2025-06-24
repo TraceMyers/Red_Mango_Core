@@ -558,7 +558,7 @@ nesting_allocator_test :: no_inline () -> bool, string {
         t2 := seconds_since_init();
         total_alloc_seconds += t2 - t1;
         max_time = max(max_time, t2-t1);
-        if it >= (refs.count-1)-100 {
+        if it >= REF_COUNT-100 {
             total_alloc_seconds_last_100 += t2 - t1;
         }
     }
@@ -571,6 +571,9 @@ nesting_allocator_test :: no_inline () -> bool, string {
         array_ordered_remove_by_index(*refs, index);
         nack_free(*a, *ref);
     }
+
+    // log("small allocator data");
+    // log("%", repr(*a.small_allocator));
 
     // not real world but whatever
     total_alloc_ms := total_alloc_seconds * 1000.0;
@@ -603,7 +606,7 @@ nesting_allocator_test :: no_inline () -> bool, string {
         t2 := seconds_since_init();
         total_alloc_seconds += t2 - t1;
         max_time = max(max_time, t2-t1);
-        if it >= (REF_COUNT-1)-100 {
+        if it >= REF_COUNT-100 {
             total_alloc_seconds_last_100 += t2 - t1;
         }
     }
@@ -758,19 +761,19 @@ serializer_test :: () -> bool, string {
     checksum: [4]u32;
     {
         ser: Serializer(.STATIC, .BYTE);
-        ser.memory = alloc_array(u8, 1024);
+        ser.memory = alloc_string(1024);
         ser.read_array_allocator = context.allocator;
         serializer_test_body(*checksum, true);
     }
     {
         ser: Serializer(.STATIC, .PRIMITIVE);
-        ser.memory = alloc_array(u8, 1024);
+        ser.memory = alloc_string(1024);
         ser.read_array_allocator = context.allocator;
         serializer_test_body();
     }
     {
         ser: Serializer(.STATIC, .PARAMETER);
-        ser.memory = alloc_array(u8, 1024);
+        ser.memory = alloc_string(1024);
         ser.read_array_allocator = context.allocator;
         ser.parameter_align = 1;
         serializer_test_body();

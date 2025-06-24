@@ -159,25 +159,21 @@ make_quat :: (forward: Vector3, up: Vector3) -> Quaternion {
     assert(is_normalized(forward,0.001));
     assert(is_normalized(right,0.001));
     assert(is_normalized(up,0.001));
+    // rot_matrix := Matrix3.{
+    //     forward.x, -right.x, up.x,
+    //     forward.y, -right.y, up.y,
+    //     forward.z, -right.z, up.z,
+    // };
     rot_matrix := Matrix3.{
-        forward.x, -right.x, up.x,
-        forward.y, -right.y, up.y,
-        forward.z, -right.z, up.z,
+        right.x, forward.x, up.x,
+        right.y, forward.y, up.y,
+        right.z, forward.z, up.z,
     };
     return get_rotation(rot_matrix);
 }
 
 set_orientation :: (out_orientation: *Quaternion, forward: Vector3, up: Vector3) {
-    right := cross(forward, up);
-    assert(is_normalized(forward,0.001));
-    assert(is_normalized(right,0.001));
-    assert(is_normalized(up,0.001));
-    rot_matrix := Matrix3.{
-        forward.x, -right.x, up.x,
-        forward.y, -right.y, up.y,
-        forward.z, -right.z, up.z,
-    };
-    out_orientation.* = get_rotation(rot_matrix);
+    out_orientation.* = make_quat(forward, up);
 }
 
 rotate :: (in_out_orientation: *Quaternion, axis: Vector3, angle: float32) {

@@ -54,6 +54,11 @@ Int_Vector3 :: struct {
     x: s32;
     y: s32;
     z: s32;
+
+#place x;
+    xy: Int_Vector2 = ---;
+#place y;
+    yz: Int_Vector2 = ---;
 }
 
 operator + :: inline (a: Int_Vector3, b: Int_Vector3) -> Int_Vector3 {
