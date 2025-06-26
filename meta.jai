@@ -105,54 +105,31 @@ try_call_command_line_procedure :: (cmd: string, args: []Command_Line_Argument) 
     } else return false;
 }
 
-try_init_command_line_arg :: (in_arg: *Command_Line_Argument, var: $Code, $T: Type) -> bool #expand {
+try_parse_command_line_arg :: (in_arg: *Command_Line_Argument, $T: Type) -> T, bool #expand {
     parse_success := true;
     arg_type_info_type :: #run T.(*Type_Info).type;
+    var: T = ---;
     #if arg_type_info_type == .INTEGER {
-        #insert var, parse_success = in_arg._int, in_arg.parse_int_success;
+        var, parse_success = in_arg._int, in_arg.parse_int_success;
     } else #if arg_type_info_type == .FLOAT {
-        #insert var, parse_success = in_arg._float, in_arg.parse_float_success;
+        var, parse_success = in_arg._float, in_arg.parse_float_success;
     } else #if arg_type_info_type == .ENUM {
         arg := in_arg._string;
-        #insert var, parse_success = parse_enum(*arg, T);
+        var, parse_success = parse_enum(*arg, T);
     } else #if arg_type_info_type == .STRING {
-        #insert var = in_arg._string;
+        var = in_arg._string;
     } else {
         assert(false);
     }
     if !parse_success {
         rm_error("unable to create arg type % from %", T, in_arg.*);
     }
-    return parse_success;
+    return var, parse_success;
 }
 
-init_command_line_proc_or_return :: (args: []Command_Line_Argument, $arg_types: ..Type) #expand {
-    if args.count != arg_types.count {
-        rm_error("expected % args of types %", arg_types.count, arg_types);
+init_command_line_proc_or_return :: (args: []Command_Line_Argument, expected_count: s64) #expand {
+    if args.count != expected_count {
+        rm_error("expected % args. got %. arglist: %", expected_count, args.count, args);
         `return;
-    }
-    #if arg_types.count >= 1 {
-        `arg0: arg_types[0];
-        if !try_init_command_line_arg(*args[0], arg0, arg_types[0]) then `return;
-    }
-    #if arg_types.count >= 2 {
-        `arg1: arg_types[1];
-        if !try_init_command_line_arg(*args[1], arg1, arg_types[1]) then `return;
-    }
-    #if arg_types.count >= 3 {
-        `arg2: arg_types[2];
-        if !try_init_command_line_arg(*args[2], arg2, arg_types[2]) then `return;
-    }
-    #if arg_types.count >= 4 {
-        `arg3: arg_types[3];
-        if !try_init_command_line_arg(*args[3], arg3, arg_types[3]) then `return;
-    }
-    #if arg_types.count >= 5 {
-        `arg4: arg_types[4];
-        if !try_init_command_line_arg(*args[4], arg4, arg_types[4]) then `return;
-    }
-    #if arg_types.count >= 6 {
-        `arg5: arg_types[5];
-        if !try_init_command_line_arg(*args[5], arg5, arg_types[5]) then `return;
     }
 }

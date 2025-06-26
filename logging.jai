@@ -31,6 +31,11 @@ rm_log_ints :: ($vars: ..Code, base := 10, minimum_digits := 1, log_location := 
     };
 }
 
+// have the logging system call this proc with the finalized text, if set
+rm_log_passthrough_callback: (log_text: string);
+// doesn't log to stdout at all - only sends text to the passthrough callback
+call_rm_log_passthrough_only := false;
+
 #scope_file // ------------------------------------------------------------------------------------------------ { FILE }
 
 report_impl :: (
@@ -44,7 +49,7 @@ report_impl :: (
     auto_release_temp();
 
     MAX_HEADER_COUNT :: 8;
-    MAX_CONTEXT_COUNT :: 32;
+    MAX_CONTEXT_COUNT :: 16;
     BRACKETS_COUNT :: 4;
     END_LEAD_SPACE :: 1;
     LEAD_BUFFER_SIZE :: MAX_HEADER_COUNT + MAX_CONTEXT_COUNT + BRACKETS_COUNT;
@@ -56,11 +61,18 @@ report_impl :: (
 
     use_location: string;
     if log_location {
-        use_location = tprint("\n          >> (location: %)", caller_loc);
+        use_location = tprint("\n>%", caller_loc);
     }
 
     msg := tprint(fmt, ..args);
-    log("% % %", lead_buffer_string, msg, use_location);
+    fully_processed_text := tprint("% % %", lead_buffer_string, msg, use_location);
+
+    if rm_log_passthrough_callback {
+        rm_log_passthrough_callback(fully_processed_text);
+    }
+    if !call_rm_log_passthrough_only {
+        log(fully_processed_text);
+    }
 }
 
 print_char_to_buffer_string :: inline (bufstr: *string, char: u8) {

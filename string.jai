@@ -105,7 +105,7 @@ reverse :: (str: string) {
     }
 }
 
-find_index_from_left :: inline (str: string, pattern: string, $COMPARE_LOWER := false) -> s64 {
+find_index_from_left :: inline (str: string, pattern: string, $COMPARE_LOWER := false, $asterisk_is_wildcard := false) -> s64 {
     match_count := 0;
     for 0..str.count-1 {
         c := str[it];
@@ -114,6 +114,9 @@ find_index_from_left :: inline (str: string, pattern: string, $COMPARE_LOWER := 
             is_match = to_lower(c) == to_lower(pattern[match_count]);
         } else {
             is_match = c == pattern[match_count];
+        }
+        #if asterisk_is_wildcard {
+            is_match |= pattern[match_count] == #char "*";
         }
         if is_match {
             match_count += 1;

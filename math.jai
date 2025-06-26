@@ -1,5 +1,6 @@
 QUATERNION_IDENTITY :: Quaternion.{0,0,0,1};
 VectorTypes :: Type.[Vector2, Vector3, Vector4, Quaternion];  // Used for type restriction in normalize().
+VectorAndFloatTypes :: Type.[Vector2, Vector3, Vector4, Quaternion, float32, float64];  // Used for type restriction in normalize().
 
 div_ceil :: inline (a: $Int_Type, b: Int_Type) -> Int_Type 
 #modify {
@@ -159,11 +160,6 @@ make_quat :: (forward: Vector3, up: Vector3) -> Quaternion {
     assert(is_normalized(forward,0.001));
     assert(is_normalized(right,0.001));
     assert(is_normalized(up,0.001));
-    // rot_matrix := Matrix3.{
-    //     forward.x, -right.x, up.x,
-    //     forward.y, -right.y, up.y,
-    //     forward.z, -right.z, up.z,
-    // };
     rot_matrix := Matrix3.{
         right.x, forward.x, up.x,
         right.y, forward.y, up.y,
@@ -287,7 +283,7 @@ smoothstep :: (x: float) -> float {
     return 3.0 * x * x - 2.0 * x * x * x;
 }
 
-exponential_interp :: (a: $T/VectorTypes, b: T, speed: float32, delta_time: float32) -> T {
+exponential_interp :: (a: $T/VectorAndFloatTypes, b: T, speed: float32, delta_time: float32) -> T {
     move_factor := min(speed * delta_time, 1.0);
     return a + (b - a) * move_factor;
 }
