@@ -69,6 +69,7 @@ MANGO_UP    :: Vector3.{UP_X, UP_Y, UP_Z};
 #import "File_Utilities";
 #import "Thread";
 #import "String";
+#import "Bit_Operations";
 Program_Print :: #import "Program_Print";
 Compiler :: #import "Compiler";
 

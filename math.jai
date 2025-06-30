@@ -90,14 +90,22 @@ alter_cast :: inline (number: $In_Type, $Out_Type: Type, $NORMALIZED_FLOAT := fa
     return xx 0;
 }
 
-respace :: (v: float, in_range: Vector2, out_range: Vector2) -> float {
+respace :: (v: float, in_range: Vector2, out_range: Vector2, $do_clamp := true) -> float {
     norm_val: float = ---;
     if in_range.y > in_range.x {
         in_range_width := in_range.y - in_range.x;
-        norm_val = (clamp(v, in_range.x, in_range.y) - in_range.x) / in_range_width;
+        #if do_clamp {
+            norm_val = (clamp(v, in_range.x, in_range.y) - in_range.x) / in_range_width;
+        } else {
+            norm_val = (v - in_range.x) / in_range_width;
+        }
     } else {
         in_range_width := in_range.x - in_range.y;
-        norm_val = 1.0 - (clamp(v, in_range.y, in_range.x) - in_range.y) / in_range_width;
+        #if do_clamp {
+            norm_val = 1.0 - (clamp(v, in_range.y, in_range.x) - in_range.y) / in_range_width;
+        } else {
+            norm_val = 1.0 - (v - in_range.y) / in_range_width;
+        }
     }
     out_range_width := out_range.y - out_range.x;
     return out_range.x + out_range_width * norm_val;

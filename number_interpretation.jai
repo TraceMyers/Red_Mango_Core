@@ -40,7 +40,7 @@ ceil_to_pow2 :: inline (n: $T) -> T {
     if n == 0 {
         return 0;
     } else if !is_power_of_two(n) {
-        return 1 << (32 - bit_scan_reverse(n));
+        return xx ((1).(u64) << (bit_scan_reverse(n)).(u64));
     } else return n;
 }
 
