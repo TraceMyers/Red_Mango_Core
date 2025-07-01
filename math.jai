@@ -1,3 +1,19 @@
+
+COS_PI_OVER_32  :: 0.9951847;
+COS_PI_OVER_28  :: 0.9937122;
+COS_PI_OVER_24  :: 0.9914449;
+COS_PI_OVER_20  :: 0.9876883;
+COS_PI_OVER_16  :: 0.9807853;
+COS_PI_OVER_12  :: 0.9659258;
+COS_PI_OVER_8   :: 0.9238795;
+COS_PI_OVER_7   :: 0.9009689;
+COS_PI_OVER_6   :: 0.8660254;
+COS_PI_OVER_5   :: 0.8090170;
+COS_PI_OVER_4   :: 0.7071067;
+COS_PI_OVER_3   :: 0.5;
+COS_PI_OVER_2   :: 0.0;
+COS_0           :: 1.0;
+
 QUATERNION_IDENTITY :: Quaternion.{0,0,0,1};
 VectorTypes :: Type.[Vector2, Vector3, Vector4, Quaternion];  // Used for type restriction in normalize().
 VectorAndFloatTypes :: Type.[Vector2, Vector3, Vector4, Quaternion, float32, float64];  // Used for type restriction in normalize().
@@ -295,3 +311,75 @@ exponential_interp :: (a: $T/VectorAndFloatTypes, b: T, speed: float32, delta_ti
     move_factor := min(speed * delta_time, 1.0);
     return a + (b - a) * move_factor;
 }
+
+// copied from https://stackoverflow.com/questions/66979936/closest-two-3d-point-between-two-line-segment-of-varied-magnitude-in-different-p so I'm not wasting time figuring out the 3d version
+distance_between_line_segments :: (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) -> float {
+    u := a2.* - a1.*;
+    v := b2.* - b1.*;
+    w := a1.* - b1.*;
+
+    a := dot(u, u);         // always >= 0
+    b := dot(u, v);
+    c := dot(v, v);         // always >= 0
+    d := dot(u, w);
+    e := dot(v, w);
+    sc, sN, sD := a*c - b*b;  // sc = sN / sD, sD >= 0
+    tc, tN, tD := a*c - b*b;  // tc = tN / tD, tD >= 0
+
+    // compute the line parameters of the two closest points
+    if sD < 0.00001 {            // the lines are almost parallel
+        sN = 0.0;              // force using point A on segment AB
+        sD = 1.0;              // to prevent possible division by 0.0 later
+        tN = e;
+        tD = c;
+    } else {                     // get the closest points on the infinite lines
+        sN = (b*e - c*d);
+        tN = (a*e - b*d);
+        if (sN < 0.0) {        // sc < 0 => the s=0 edge is visible
+            sN = 0.0;          // compute shortest connection of A to segment CD
+            tN = e;
+            tD = c;
+        } else if (sN > sD) {    // sc > 1  => the s=1 edge is visible
+            sN = sD;           // compute shortest connection of B to segment CD
+            tN = e + b;
+            tD = c;
+        }
+    }
+
+    if (tN < 0.0) {            // tc < 0 => the t=0 edge is visible
+        tN = 0.0;             
+        // recompute sc for this edge
+        if (-d < 0.0) {          // compute shortest connection of C to segment AB
+            sN = 0.0;
+        } else if (-d > a) {
+            sN = sD;
+        } else {
+            sN = -d;
+            sD = a;
+        }
+    }
+    else if (tN > tD) {      // tc > 1  => the t=1 edge is visible
+        tN = tD;
+        // recompute sc for this edge
+        if ((-d + b) < 0.0) {  // compute shortest connection of D to segment AB
+            sN = 0;
+        } else if ((-d + b) > a) {
+            sN = sD;
+        } else {
+            sN = (-d +  b);
+            sD = a;
+        }
+    }
+    // finally do the division to get sc and tc
+    sc = ifx abs(sN) < 0.00001 then 0.0 else sN / sD;
+    tc = ifx abs(tN) < 0.00001 then 0.0 else tN / tD;
+
+    closest_point_a.* = a1 + (sc * u);
+    closest_point_b.* = b1 + (tc * v);  
+
+	return distance(closest_point_a.*, closest_point_b.*);
+}
+
+// square :: inline (a: $T) -> T {
+//     return a * a;
+// } 
