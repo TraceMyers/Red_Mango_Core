@@ -1,4 +1,11 @@
 
+SMALLISH_NUMBER     :: 0.01;
+SMALL_NUMBER        :: 0.0001;
+VERY_SMALL_NUMBER   :: 0.000001;
+
+INV_PI          :: 1.0 / PI;
+INV_2_PI        :: 1.0 / (2.0 * PI);
+
 COS_PI_OVER_32  :: 0.9951847;
 COS_PI_OVER_28  :: 0.9937122;
 COS_PI_OVER_24  :: 0.9914449;
@@ -199,14 +206,16 @@ set_orientation :: (out_orientation: *Quaternion, forward: Vector3, up: Vector3)
 rotate :: (in_out_orientation: *Quaternion, axis: Vector3, angle: float32) {
     assert(is_normalized(axis));
     ht := angle * 0.5;
-    rot_quat := Quaternion.{xyz=axis*sin(ht), w=cos(ht)};
+    sin_ht, cos_ht := sin_cos(ht);
+    rot_quat := Quaternion.{xyz=axis*sin_ht, w=cos_ht};
     in_out_orientation.* = rot_quat * in_out_orientation.*;
 }
 
 rotate :: inline (v: Vector3, axis: Vector3, angle: float32) -> Vector3 {
     assert(is_normalized(axis));
     ht := angle * 0.5;
-    rot_quat := Quaternion.{xyz=axis*sin(ht), w=cos(ht)};
+    sin_ht, cos_ht := sin_cos(ht);
+    rot_quat := Quaternion.{xyz=axis*sin_ht, w=cos_ht};
     return rotate(v, rot_quat);
 }
 
@@ -271,7 +280,7 @@ interp_rotate :: (origin: Quaternion, target: Quaternion, norm: float32) -> Quat
 interp_rotate :: (origin: Quaternion, target: Quaternion, speed: float32, delta_time: float32) -> Quaternion {
     rot_dist := speed * delta_time;
     cos_ht := abs(dot(origin, target));
-    // todo: prob don' need to do acos here and in slerp
+    // todo: prob don't need to do acos here and in slerp
     t := 2.0 * acos(cos_ht);
     if abs(rot_dist) >= t {
         return target;
@@ -312,8 +321,7 @@ exponential_interp :: (a: $T/VectorAndFloatTypes, b: T, speed: float32, delta_ti
     return a + (b - a) * move_factor;
 }
 
-// copied from https://stackoverflow.com/questions/66979936/closest-two-3d-point-between-two-line-segment-of-varied-magnitude-in-different-p so I'm not wasting time figuring out the 3d version
-distance_between_line_segments :: (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) -> float {
+closest_point_on_each_line_segment :: (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) {
     u := a2.* - a1.*;
     v := b2.* - b1.*;
     w := a1.* - b1.*;
@@ -327,7 +335,7 @@ distance_between_line_segments :: (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2:
     tc, tN, tD := a*c - b*b;  // tc = tN / tD, tD >= 0
 
     // compute the line parameters of the two closest points
-    if sD < 0.00001 {            // the lines are almost parallel
+    if sD < VERY_SMALL_NUMBER {            // the lines are almost parallel
         sN = 0.0;              // force using point A on segment AB
         sD = 1.0;              // to prevent possible division by 0.0 later
         tN = e;
@@ -371,15 +379,92 @@ distance_between_line_segments :: (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2:
         }
     }
     // finally do the division to get sc and tc
-    sc = ifx abs(sN) < 0.00001 then 0.0 else sN / sD;
-    tc = ifx abs(tN) < 0.00001 then 0.0 else tN / tD;
+    sc = ifx abs(sN) < VERY_SMALL_NUMBER then 0.0 else sN / sD;
+    tc = ifx abs(tN) < VERY_SMALL_NUMBER then 0.0 else tN / tD;
 
     closest_point_a.* = a1 + (sc * u);
     closest_point_b.* = b1 + (tc * v);  
+}
 
+// copied from https://stackoverflow.com/questions/66979936/closest-two-3d-point-between-two-line-segment-of-varied-magnitude-in-different-p so I'm not wasting time figuring out the 3d version
+distance_between_line_segments :: inline (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) -> float {
+    closest_point_on_each_line_segment(a1, a2, b1, b2, closest_point_a, closest_point_b);
 	return distance(closest_point_a.*, closest_point_b.*);
 }
 
-// square :: inline (a: $T) -> T {
-//     return a * a;
-// } 
+distance_squared_between_line_segments :: inline (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) -> float {
+    closest_point_on_each_line_segment(a1, a2, b1, b2, closest_point_a, closest_point_b);
+	return distance_squared(closest_point_a.*, closest_point_b.*);
+}
+
+mod_two_pi :: inline (x: float) -> float {
+    assert(x >= 0);
+
+    // old-timey division from before cpus could divide. my brain is foggy rn but it involves the divisor being in the lower bits
+    // and using int multiplication. conveniently gives the remainder as a byproduct.
+
+    x_fixed := (x * FIXED_ONE).(u64);
+    prod := x_fixed * RECIP_TWO_PI_FIXED_32;
+    quotient := prod >> 32;
+
+    remainder_fixed := x_fixed - (quotient * TWO_PI_FIXED);
+    if remainder_fixed < 0 then remainder_fixed += TWO_PI_FIXED;
+
+    out_val := remainder_fixed.(float) * INV_FIXED_ONE;
+
+    // don't use this procedure if the input value is too large
+    ERROR :: 0.01;
+    assert(out_val < 2.0 * PI + ERROR);
+    return out_val;
+}
+
+// gives value and sign in [-pi/2, pi/2] for fast_sin and fast_cos
+convert_to_fast_trig_range :: inline (x: float32) -> x1: float32, sin_sign: float32, cos_sign: float32 {
+    pos_x, sin_sign, cos_sign : float32 = ---;
+    if sign(x) == 1.0 {
+        pos_x = x;
+        sin_sign = 1.0;
+        cos_sign = 1.0;
+    } else {
+        pos_x = x * -1.0;
+        sin_sign = sign(x);
+        cos_sign = -sin_sign;
+    }
+
+    // get value in [0, 2pi)
+    x1 := mod_two_pi(pos_x);
+    // map to [-pi/2, pi/2)
+    if x1 > (3 * PI * 0.5) {
+        x1 -= 2.0 * PI;
+    } else if x1 > PI {
+        x1 = (PI * 0.5 - (x1 - (3.0 * PI * 0.5)));
+        sin_sign *= -1.0;
+    } else if x1 > PI * 0.5 {
+        x1 = PI - x1;    
+        cos_sign *= -1.0;
+    }
+
+    return x1, sin_sign, cos_sign;
+}
+
+// limited implementation. expects x to be roughly in (-500,500) due to limited precision in mod_two_pi
+// test shows ~25-50% reduction in time (maybe depending on branch misses) from using sin and cos separately
+sin_cos :: inline (x: float32) -> sin_x: float32, cos_x: float32 {
+    x1, sin_sign, cos_sign := convert_to_fast_trig_range(x); 
+    x2 := x1 * x1;
+	pos_val_sin := (((((-0.000000023889859 * x2 + 0.0000027525562) * x2 - 0.00019840874) * x2 + 0.0083333310) * x2 - 0.16666667) * x2 + 1.0) * x1;
+	pos_val_cos := ((((-0.00000026051615 * x2 + 0.000024760495) * x2 - 0.0013888378) * x2 + 0.041666638) * x2 - 0.5) * x2 + 1.0;
+    return pos_val_sin * sin_sign, pos_val_cos * cos_sign;
+}
+
+sign :: inline (x: float32) -> float32 {
+    return ifx x < 0 then -1.0 else 1.0;
+}
+
+#scope_file // ------------------------------------------------------------------------------------------------ { FILE }
+
+FIXED_SHIFT : u64 : 14; // seems to maximize precision over the whole sin_cos process
+FIXED_ONE : u64 : 1 << FIXED_SHIFT;
+INV_FIXED_ONE :: 1.0 / FIXED_ONE.(float);
+TWO_PI_FIXED : u64 : xx (PI * 2.0 * FIXED_ONE.(float));
+RECIP_TWO_PI_FIXED_32 :: (1 << 32) / TWO_PI_FIXED;
