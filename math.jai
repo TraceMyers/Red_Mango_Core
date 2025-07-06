@@ -1,11 +1,12 @@
 
-SMALLISH_NUMBER     :: 0.01;
+SMALLISH_NUMBER     :: 0.003;
 SMALL_NUMBER        :: 0.0001;
 VERY_SMALL_NUMBER   :: 0.000001;
 
 INV_PI          :: 1.0 / PI;
 INV_2_PI        :: 1.0 / (2.0 * PI);
 
+COS_0           :: 1.0;
 COS_PI_OVER_32  :: 0.9951847;
 COS_PI_OVER_28  :: 0.9937122;
 COS_PI_OVER_24  :: 0.9914449;
@@ -19,10 +20,10 @@ COS_PI_OVER_5   :: 0.8090170;
 COS_PI_OVER_4   :: 0.7071067;
 COS_PI_OVER_3   :: 0.5;
 COS_PI_OVER_2   :: 0.0;
-COS_0           :: 1.0;
 
 QUATERNION_IDENTITY :: Quaternion.{0,0,0,1};
 VectorTypes :: Type.[Vector2, Vector3, Vector4, Quaternion];  // Used for type restriction in normalize().
+Vector2Types :: Type.[Vector2, Int_Vector2];
 VectorAndFloatTypes :: Type.[Vector2, Vector3, Vector4, Quaternion, float32, float64];  // Used for type restriction in normalize().
 
 div_ceil :: inline (a: $Int_Type, b: Int_Type) -> Int_Type 
@@ -182,15 +183,29 @@ is_power_of_two :: inline (val: u64) -> bool {
     return val > 0 && (val & (val - 1)) == 0;
 }
 
-do_ranges_overlap :: inline (x1: $T, x2: T, y1: T, y2: T) -> bool {
-    return y2 >= x1 && y1 <= x2;
+sort_range :: (in_vec: Int_Vector2) -> Int_Vector2 {
+    return .{min(in_vec.x, in_vec.y), max(in_vec.x, in_vec.y)};
+}
+
+ordered_ranges_overlap :: inline (range_1: $T/Vector2Types, range_2: T) -> bool {
+    return range_2.y >= range_1.x && range_2.x <= range_1.y;
+}
+
+// either inclusive min and max OR inclusive min and exclusive max. 
+value_in_unordered_range :: inline (val: s32, range: Int_Vector2, $mode := enum{INCLUSIVE; EXCLUSIVE_MAX;}.INCLUSIVE) -> bool {
+    #if mode == .INCLUSIVE {
+        return (val >= min(range.x, range.y)) & (val <= max(range.x, range.y));
+    } else { // EXCLUSIVE_MAX
+        // if the range x and y are on either side of the value, one difference will be negative and the other positive, causing their xor to be negative. inspired by build engine (duke3d)
+        return ((val - range.x) ^ (val - range.y)) < 0;
+    }
 }
 
 make_quat :: (forward: Vector3, up: Vector3) -> Quaternion {
     right := cross(forward, up);
-    assert(is_normalized(forward,0.001));
-    assert(is_normalized(right,0.001));
-    assert(is_normalized(up,0.001));
+    assert(is_normalized(forward,   SMALL_NUMBER));
+    assert(is_normalized(right,     SMALL_NUMBER));
+    assert(is_normalized(up,        SMALL_NUMBER));
     rot_matrix := Matrix3.{
         right.x, forward.x, up.x,
         right.y, forward.y, up.y,
@@ -397,24 +412,27 @@ distance_squared_between_line_segments :: inline (a1: *Vector3, a2: *Vector3, b1
 	return distance_squared(closest_point_a.*, closest_point_b.*);
 }
 
+// don't use this procedure if the input value is too large! makes large error.
+// recommended max somewhere in 2000-5000
 mod_two_pi :: inline (x: float) -> float {
     assert(x >= 0);
 
-    // old-timey division from before cpus could divide. my brain is foggy rn but it involves the divisor being in the lower bits
-    // and using int multiplication. conveniently gives the remainder as a byproduct.
+    // old-timey division from before cpus could divide. my brain is foggy rn but it involves the divisor being in the lower bits and using int multiplication. conveniently gives the remainder as a byproduct.
 
     x_fixed := (x * FIXED_ONE).(u64);
     prod := x_fixed * RECIP_TWO_PI_FIXED_32;
     quotient := prod >> 32;
 
     remainder_fixed := x_fixed - (quotient * TWO_PI_FIXED);
-    if remainder_fixed < 0 then remainder_fixed += TWO_PI_FIXED;
+    if remainder_fixed < 0 {
+        remainder_fixed += TWO_PI_FIXED;
+    } else if remainder_fixed >= TWO_PI_FIXED {
+        remainder_fixed -= TWO_PI_FIXED;
+    }
 
     out_val := remainder_fixed.(float) * INV_FIXED_ONE;
 
-    // don't use this procedure if the input value is too large
-    ERROR :: 0.01;
-    assert(out_val < 2.0 * PI + ERROR);
+    assert(out_val >= 0 && out_val < 2.0 * PI);
     return out_val;
 }
 
@@ -447,8 +465,7 @@ convert_to_fast_trig_range :: inline (x: float32) -> x1: float32, sin_sign: floa
     return x1, sin_sign, cos_sign;
 }
 
-// limited implementation. expects x to be roughly in (-500,500) due to limited precision in mod_two_pi
-// test shows ~25-50% reduction in time (maybe depending on branch misses) from using sin and cos separately
+// test shows ~25-50% reduction in time (maybe depending on branch misses) from using sin and cos separately. inputs are recommended to stay within domain (-5000,5000) to keep max error below 0.035 and median error ~0.0001, due to limitations with mod_two_pi()
 sin_cos :: inline (x: float32) -> sin_x: float32, cos_x: float32 {
     x1, sin_sign, cos_sign := convert_to_fast_trig_range(x); 
     x2 := x1 * x1;
@@ -459,6 +476,14 @@ sin_cos :: inline (x: float32) -> sin_x: float32, cos_x: float32 {
 
 sign :: inline (x: float32) -> float32 {
     return ifx x < 0 then -1.0 else 1.0;
+}
+
+project_point_onto_plane :: inline (point: Vector3, point_on_plane: Vector3, plane_normal: Vector3) -> Vector3 {
+    assert(is_normalized(plane_normal));
+    diff := point - point_on_plane;
+    // distance along the plane normal
+    scaled_cos_t := dot_product(plane_normal, diff);
+    return point - plane_normal * scaled_cos_t;
 }
 
 #scope_file // ------------------------------------------------------------------------------------------------ { FILE }

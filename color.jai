@@ -31,7 +31,7 @@ Color4f :: struct {
     r: float32;
     g: float32;
     b: float32;
-    a: float32;
+    a: float32 = 1.0;
 
 #place r;
     rgb: Color3f = ---;
@@ -55,7 +55,7 @@ Color4b :: struct {
     r: u8 #align 4; // should align to 4 bytes so this struct can be read as a u32;
     g: u8;
     b: u8;
-    a: u8;
+    a: u8 = 255;
 
 #place r;
     bytes: [4]u8 = ---;

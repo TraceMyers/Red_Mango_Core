@@ -11,7 +11,7 @@ bound_array :: inline (from_data: []$T) -> Bound_Array(T) {
     return buf;
 }
 
-bound_array_add :: inline (buf: *Bound_Array($T)) -> *T #must {
+bound_array_add :: inline (buf: *Bound_Array($T)) -> *T {
     assert(buf.array.count + 1 <= buf.max);
     buf.array.count += 1;
     return *buf.array[buf.array.count-1];
