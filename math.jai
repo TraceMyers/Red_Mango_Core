@@ -26,6 +26,11 @@ VectorTypes :: Type.[Vector2, Vector3, Vector4, Quaternion];  // Used for type r
 Vector2Types :: Type.[Vector2, Int_Vector2];
 VectorAndFloatTypes :: Type.[Vector2, Vector3, Vector4, Quaternion, float32, float64];  // Used for type restriction in normalize().
 
+Ray3 :: struct {
+    origin: Vector3;
+    direction: Vector3;
+}
+
 div_ceil :: inline (a: $Int_Type, b: Int_Type) -> Int_Type 
 #modify {
     return is_int_type(Int_Type);
@@ -337,22 +342,30 @@ exponential_interp :: (a: $T/VectorAndFloatTypes, b: T, speed: float32, delta_ti
 }
 
 closest_point_on_each_line_segment :: (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) {
-    u := a2.* - a1.*;
-    v := b2.* - b1.*;
+    a_diff := a2.* - a1.*;
+    b_diff := b2.* - b1.*;
     w := a1.* - b1.*;
 
-    a := dot(u, u);         // always >= 0
-    b := dot(u, v);
-    c := dot(v, v);         // always >= 0
-    d := dot(u, w);
-    e := dot(v, w);
+    a := dot(a_diff, a_diff);         // always >= 0
+    b := dot(a_diff, b_diff);
+    c := dot(b_diff, b_diff);         // always >= 0
+    d := dot(a_diff, w);
+    e := dot(b_diff, w);
     sc, sN, sD := a*c - b*b;  // sc = sN / sD, sD >= 0
     tc, tN, tD := a*c - b*b;  // tc = tN / tD, tD >= 0
 
     // compute the line parameters of the two closest points
     if sD < VERY_SMALL_NUMBER {            // the lines are almost parallel
-        sN = 0.0;              // force using point A on segment AB
-        sD = 1.0;              // to prevent possible division by 0.0 later
+        end_diff := a2.* - b2.*;
+        beg_dist_sq := length_squared(w);
+        end_dist_sq := length_squared(end_diff);
+        if end_dist_sq < beg_dist_sq {
+            sN = 1.0;              // force using point A on segment AB
+            sD = 1.0;              // to prevent possible division by 0.0 later
+        } else {
+            sN = 0.0;              // force using point A on segment AB
+            sD = 1.0;              // to prevent possible division by 0.0 later
+        }
         tN = e;
         tD = c;
     } else {                     // get the closest points on the infinite lines
@@ -397,19 +410,84 @@ closest_point_on_each_line_segment :: (a1: *Vector3, a2: *Vector3, b1: *Vector3,
     sc = ifx abs(sN) < VERY_SMALL_NUMBER then 0.0 else sN / sD;
     tc = ifx abs(tN) < VERY_SMALL_NUMBER then 0.0 else tN / tD;
 
-    closest_point_a.* = a1 + (sc * u);
-    closest_point_b.* = b1 + (tc * v);  
+    closest_point_a.* = a1 + (sc * a_diff);
+    closest_point_b.* = b1 + (tc * b_diff);  
 }
 
 // copied from https://stackoverflow.com/questions/66979936/closest-two-3d-point-between-two-line-segment-of-varied-magnitude-in-different-p so I'm not wasting time figuring out the 3d version
-distance_between_line_segments :: inline (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) -> float {
+distance_between_line_segments :: (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) -> float {
     closest_point_on_each_line_segment(a1, a2, b1, b2, closest_point_a, closest_point_b);
 	return distance(closest_point_a.*, closest_point_b.*);
 }
 
-distance_squared_between_line_segments :: inline (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) -> float {
+distance_squared_between_line_segments :: (a1: *Vector3, a2: *Vector3, b1: *Vector3, b2: *Vector3, closest_point_a: *Vector3, closest_point_b: *Vector3) -> float {
     closest_point_on_each_line_segment(a1, a2, b1, b2, closest_point_a, closest_point_b);
 	return distance_squared(closest_point_a.*, closest_point_b.*);
+}
+
+line_projection_norm_dist :: inline (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3, out_toward_end: *Vector3) -> t: float {
+    out_toward_end.* = seg_end.* - seg_beg.*;
+    toward_pt  := point.* - seg_beg.*;
+    scaled_cos_t := dot(out_toward_end.*, toward_pt);
+    segment_dist_sq := dot(out_toward_end.*, out_toward_end.*);
+    return scaled_cos_t / segment_dist_sq;
+}
+
+closest_point_on_line_and_segment :: (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3, out_point_on_line: *Vector3, out_point_on_segment: *Vector3) {
+    toward_end: Vector3 = ---;
+    norm_dist := line_projection_norm_dist(point, seg_beg, seg_end, *toward_end);
+    out_point_on_line.* = seg_beg.* + toward_end * norm_dist;
+    clamped_norm_dist := clamp(norm_dist, 0, 1);
+    out_point_on_segment.* = seg_beg.* + toward_end * clamped_norm_dist;
+}
+
+closest_point_on_line_segment :: (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> Vector3 {
+    toward_end: Vector3 = ---;
+    norm_dist := line_projection_norm_dist(point, seg_beg, seg_end, *toward_end);
+    clamped_norm_dist := clamp(norm_dist, 0, 1);
+    return seg_beg.* + toward_end * clamped_norm_dist;
+}
+
+closest_point_on_line :: (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> Vector3 {
+    toward_end: Vector3 = ---;
+    norm_dist := line_projection_norm_dist(point, seg_beg, seg_end, *toward_end);
+    return seg_beg.* + toward_end * norm_dist;
+}
+
+closest_point_on_line :: inline (point: *Vector3, ray: *Ray3) -> Vector3 {
+    line_beg := ray.origin;
+    line_end := ray.origin + ray.direction;
+    return closest_point_on_line(point, *line_beg, *line_end);
+}
+
+distance_from_line_segment :: inline (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> float {
+    closest_point := closest_point_on_line_segment(point, seg_beg, seg_end);
+    return distance(closest_point, point.*);
+}
+
+distance_squared_from_line_segment :: inline (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> float {
+    closest_point := closest_point_on_line_segment(point, seg_beg, seg_end);
+    return distance_squared(closest_point, point.*);
+}
+
+distance_from_line :: inline (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> float {
+    closest_point := closest_point_on_line(point, seg_beg, seg_end);
+    return distance(closest_point, point.*);
+}
+
+distance_squared_from_line :: inline (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> float {
+    closest_point := closest_point_on_line(point, seg_beg, seg_end);
+    return distance_squared(closest_point, point.*);
+}
+
+distance_from_line :: inline (point: *Vector3, ray: *Ray3) -> float {
+    closest_point := closest_point_on_line(point, ray);
+    return distance(closest_point, point.*);
+}
+
+distance_squared_from_line :: inline (point: *Vector3, ray: *Ray3) -> float {
+    closest_point := closest_point_on_line(point, ray);
+    return distance_squared(closest_point, point.*);
 }
 
 // don't use this procedure if the input value is too large! makes large error.
@@ -485,6 +563,15 @@ project_point_onto_plane :: inline (point: Vector3, point_on_plane: Vector3, pla
     scaled_cos_t := dot_product(plane_normal, diff);
     return point - plane_normal * scaled_cos_t;
 }
+
+reflection_component :: inline (vector: Vector3, normal: Vector3) -> float {
+    return 2.0 * dot(vector, -normal);
+}
+
+reflect :: inline (vector: Vector3, normal: Vector3) -> Vector3 {
+    return vector + reflection_component(vector, normal) * normal; 
+}
+
 
 #scope_file // ------------------------------------------------------------------------------------------------ { FILE }
 
