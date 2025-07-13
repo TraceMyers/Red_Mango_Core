@@ -1,5 +1,5 @@
 
-SMALLISH_NUMBER     :: 0.003;
+SMALLISH_NUMBER     :: 0.01;
 SMALL_NUMBER        :: 0.0001;
 VERY_SMALL_NUMBER   :: 0.000001;
 
@@ -7,6 +7,8 @@ INV_PI          :: 1.0 / PI;
 INV_2_PI        :: 1.0 / (2.0 * PI);
 
 COS_0           :: 1.0;
+COS_PI_OVER_128 :: 0.9996988;
+COS_PI_OVER_64  :: 0.9987955;
 COS_PI_OVER_32  :: 0.9951847;
 COS_PI_OVER_28  :: 0.9937122;
 COS_PI_OVER_24  :: 0.9914449;
@@ -223,6 +225,12 @@ set_orientation :: (out_orientation: *Quaternion, forward: Vector3, up: Vector3)
     out_orientation.* = make_quat(forward, up);
 }
 
+get_axes :: (orientation: Quaternion, forward: *Vector3, up: *Vector3, right: *Vector3) {
+    forward.* = fore_direction(*orientation);
+    up.* = up_direction(*orientation);
+    right.* = cross(forward, up);
+}
+
 rotate :: (in_out_orientation: *Quaternion, axis: Vector3, angle: float32) {
     assert(is_normalized(axis));
     ht := angle * 0.5;
@@ -360,7 +368,7 @@ closest_point_on_each_line_segment :: (a1: *Vector3, a2: *Vector3, b1: *Vector3,
         beg_dist_sq := length_squared(w);
         end_dist_sq := length_squared(end_diff);
         if end_dist_sq < beg_dist_sq {
-            sN = 1.0;              // force using point A on segment AB
+            sN = 1.0;              // force using point B on segment AB
             sD = 1.0;              // to prevent possible division by 0.0 later
         } else {
             sN = 0.0;              // force using point A on segment AB
@@ -433,31 +441,33 @@ line_projection_norm_dist :: inline (point: *Vector3, seg_beg: *Vector3, seg_end
     return scaled_cos_t / segment_dist_sq;
 }
 
-closest_point_on_line_and_segment :: (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3, out_point_on_line: *Vector3, out_point_on_segment: *Vector3) {
+closest_point_on_line_and_segment :: (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3, out_point_on_line: *Vector3, out_point_on_segment: *Vector3) -> norm_dist: float {
     toward_end: Vector3 = ---;
     norm_dist := line_projection_norm_dist(point, seg_beg, seg_end, *toward_end);
     out_point_on_line.* = seg_beg.* + toward_end * norm_dist;
     clamped_norm_dist := clamp(norm_dist, 0, 1);
     out_point_on_segment.* = seg_beg.* + toward_end * clamped_norm_dist;
+    return norm_dist;
 }
 
-closest_point_on_line_segment :: (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> Vector3 {
+closest_point_on_line_segment :: (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> Vector3, float {
     toward_end: Vector3 = ---;
     norm_dist := line_projection_norm_dist(point, seg_beg, seg_end, *toward_end);
     clamped_norm_dist := clamp(norm_dist, 0, 1);
-    return seg_beg.* + toward_end * clamped_norm_dist;
+    return seg_beg.* + toward_end * clamped_norm_dist, clamped_norm_dist;
 }
 
-closest_point_on_line :: (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> Vector3 {
+closest_point_on_line :: (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> Vector3, float {
     toward_end: Vector3 = ---;
     norm_dist := line_projection_norm_dist(point, seg_beg, seg_end, *toward_end);
-    return seg_beg.* + toward_end * norm_dist;
+    return seg_beg.* + toward_end * norm_dist, norm_dist;
 }
 
-closest_point_on_line :: inline (point: *Vector3, ray: *Ray3) -> Vector3 {
+closest_point_on_line :: inline (point: *Vector3, ray: *Ray3) -> Vector3, float {
     line_beg := ray.origin;
     line_end := ray.origin + ray.direction;
-    return closest_point_on_line(point, *line_beg, *line_end);
+    point, norm_dist := closest_point_on_line(point, *line_beg, *line_end);
+    return point, norm_dist;
 }
 
 distance_from_line_segment :: inline (point: *Vector3, seg_beg: *Vector3, seg_end: *Vector3) -> float {
@@ -572,9 +582,21 @@ reflect :: inline (vector: Vector3, normal: Vector3) -> Vector3 {
     return vector + reflection_component(vector, normal) * normal; 
 }
 
+deg2rad :: inline (deg: float) -> rad: float {
+    return deg * (PI / 180.0);
+}
+
+rad2deg :: inline (rad: float) -> deg: float {
+    return rad * (180.0 / PI);
+}
+
+toggle :: inline (b: *bool) {
+    b.* = !b.*;
+}
 
 #scope_file // ------------------------------------------------------------------------------------------------ { FILE }
 
+// precalculated fixed point math values for sin_cos
 FIXED_SHIFT : u64 : 14; // seems to maximize precision over the whole sin_cos process
 FIXED_ONE : u64 : 1 << FIXED_SHIFT;
 INV_FIXED_ONE :: 1.0 / FIXED_ONE.(float);

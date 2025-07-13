@@ -7,11 +7,11 @@ operator + :: (a: Vector2, scalar: float32) -> Vector2 {
     return .{a.x + scalar, a.y + scalar};
 }
 
-operator - :: (a: Vector3, scalar: float32) -> Vector2 {
+operator - :: (a: Vector3, scalar: float32) -> Vector3 {
     return .{a.x - scalar, a.y - scalar, a.z - scalar};
 }
 
-operator + :: (a: Vector3, scalar: float32) -> Vector2 {
+operator + :: (a: Vector3, scalar: float32) -> Vector3 {
     return .{a.x + scalar, a.y + scalar, a.z + scalar};
 }
 

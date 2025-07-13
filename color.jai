@@ -1,4 +1,16 @@
 
+COLOR4F_WHITE       :: Color4f.{1,1,1,1};
+COLOR4F_RED         :: Color4f.{1,0,0,1};
+COLOR4F_GREEN       :: Color4f.{0,1,0,1};
+COLOR4F_BLUE        :: Color4f.{0,0,1,1};
+COLOR4F_BLACK       :: Color4f.{0,0,0,1};
+
+// COLOR4B_WHITE       :: #run to_color4b(COLOR4F_WHITE);
+// COLOR4B_RED         :: #run to_color4b(COLOR4F_RED);
+// COLOR4B_GREEN       :: #run to_color4b(COLOR4B_GREEN);
+// COLOR4B_BLUE        :: #run to_color4b(COLOR4B_BLUE);
+// COLOR4B_BLACK       :: #run to_color4b(COLOR4B_BLACK);
+
 Color2f :: struct {
     r: float32;
     g: float32;
