@@ -1,5 +1,5 @@
 
-SMALLISH_NUMBER     :: 0.01;
+SMALLISH_NUMBER     :: 0.003;
 SMALL_NUMBER        :: 0.0001;
 VERY_SMALL_NUMBER   :: 0.000001;
 
@@ -228,23 +228,26 @@ set_orientation :: (out_orientation: *Quaternion, forward: Vector3, up: Vector3)
 get_axes :: (orientation: Quaternion, forward: *Vector3, up: *Vector3, right: *Vector3) {
     forward.* = fore_direction(*orientation);
     up.* = up_direction(*orientation);
-    right.* = cross(forward, up);
+    right.* = normalize(cross(forward, up));
 }
 
 rotate :: (in_out_orientation: *Quaternion, axis: Vector3, angle: float32) {
     assert(is_normalized(axis));
     ht := angle * 0.5;
-    sin_ht, cos_ht := sin_cos(ht);
+    sin_ht := sin(ht);
+    cos_ht := cos(ht);
     rot_quat := Quaternion.{xyz=axis*sin_ht, w=cos_ht};
     in_out_orientation.* = rot_quat * in_out_orientation.*;
+    assert(!is_nan_is_inf(in_out_orientation.x) && !is_nan_is_inf(in_out_orientation.y) && !is_nan_is_inf(in_out_orientation.z) && !is_nan_is_inf(in_out_orientation.z));
 }
 
 rotate :: inline (v: Vector3, axis: Vector3, angle: float32) -> Vector3 {
     assert(is_normalized(axis));
     ht := angle * 0.5;
-    sin_ht, cos_ht := sin_cos(ht);
+    sin_ht := sin(ht);
+    cos_ht := cos(ht);
     rot_quat := Quaternion.{xyz=axis*sin_ht, w=cos_ht};
-    return rotate(v, rot_quat);
+    return normalize(rotate(v, rot_quat));
 }
 
 right_direction :: inline (q: *Quaternion) -> Vector3 {
@@ -554,6 +557,7 @@ convert_to_fast_trig_range :: inline (x: float32) -> x1: float32, sin_sign: floa
 }
 
 // test shows ~25-50% reduction in time (maybe depending on branch misses) from using sin and cos separately. inputs are recommended to stay within domain (-5000,5000) to keep max error below 0.035 and median error ~0.0001, due to limitations with mod_two_pi()
+// todo: bring the error down
 sin_cos :: inline (x: float32) -> sin_x: float32, cos_x: float32 {
     x1, sin_sign, cos_sign := convert_to_fast_trig_range(x); 
     x2 := x1 * x1;
@@ -566,12 +570,12 @@ sign :: inline (x: float32) -> float32 {
     return ifx x < 0 then -1.0 else 1.0;
 }
 
-project_point_onto_plane :: inline (point: Vector3, point_on_plane: Vector3, plane_normal: Vector3) -> Vector3 {
-    assert(is_normalized(plane_normal));
+project_point_onto_plane :: inline (point: Vector3, point_on_plane: Vector3, plane_normal: Vector3) -> Vector3, float {
+    assert(is_normalized(plane_normal, SMALLISH_NUMBER));
     diff := point - point_on_plane;
     // distance along the plane normal
     scaled_cos_t := dot_product(plane_normal, diff);
-    return point - plane_normal * scaled_cos_t;
+    return point - plane_normal * scaled_cos_t, scaled_cos_t;
 }
 
 reflection_component :: inline (vector: Vector3, normal: Vector3) -> float {
